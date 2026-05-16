@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: telegram-affiliate-bot
+    runtime: docker
+    plan: free
+    region: singapore # Change this to your preferred region (e.g., oregon, frankfurt)
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: TELEGRAM_API_ID
+        sync: false # Set this in the Render dashboard
+      - key: TELEGRAM_API_HASH
+        sync: false # Set this in the Render dashboard
+      - key: TELEGRAM_STRING_SESSION
+        sync: false # Set this in the Render dashboard
+      - key: TELEGRAM_ALLOWED_CHATS
+        sync: false # Set this in the Render dashboard
+      - key: EARNKARO_API_TOKEN
+        sync: false # Set this in the Render dashboard
+      - key: WHATSAPP_TARGET_GROUP
+        sync: false # Set this in the Render dashboard
+      - key: LOG_LEVEL
+        value: info
