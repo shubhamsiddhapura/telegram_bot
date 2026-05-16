@@ -278,13 +278,17 @@ class WhatsAppService {
   }
 
   _resetDailyIfNeeded() {
-    const today = this._getISTDateString();
-    if (this._lastResetDate !== today) {
-      this._lastResetDate = today;
-      this._todayStartTime = 480 + Math.floor(Math.random() * 60);
-      this._generateDailyBreaks();
-      log.info(`🔄 New day reset. Bot will start at ${Math.floor(this._todayStartTime / 60)}:${String(this._todayStartTime % 60).padStart(2, '0')} IST.`);
-    }
+    const now = new Date();
+    const dateStr = now.toDateString();
+
+    if (this._lastResetDate === dateStr) return;
+
+    this._lastResetDate = dateStr;
+    log.info('🔄 New day reset. Quiet hours disabled for testing.');
+
+    // Set to 0 to disable quiet hours for now
+    this._todayStartTime = 0;
+    this._generateDailyBreaks();
   }
 
   _getSmartDelay() {

@@ -51,16 +51,6 @@ class MessageProcessorService {
     // ── 2. Extract URLs ──────────────────────────────────────────────────────
     const allUrls = extractUrls(text || '');
 
-    // ── 2b. Amazon Filter (Skip whole message) ───────────────────────────────
-    const { isAmazonUrl } = require('../utils/urlExtractor');
-    const hasAmazonLink = allUrls.some(url => isAmazonUrl(url));
-
-    if (hasAmazonLink) {
-      log.info('Message contains Amazon link; skipping whole message as requested', ctx);
-      return;
-    }
-
-
     // ── 2c. URL presence check ───────────────────────────────────────────────
     if (allUrls.length === 0) {
       log.debug('No URLs found in message; skipping as requested', ctx);
