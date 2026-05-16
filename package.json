@@ -8,6 +8,7 @@
     "build": "node scripts/check-env.js",
     "dev": "nodemon src/server.js",
     "qr": "node scan-qr.js",
+    "gen-wa-session": "node scripts/generate-wa-session.js",
     "lint": "eslint src/",
     "test": "jest --coverage"
   },

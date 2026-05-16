@@ -54,6 +54,22 @@ class WhatsAppService {
     log.info('Initializing native WhatsApp connection (Baileys)...');
 
     try {
+      // ─── Hydrate Session from Env Var (Railway/Production) ────────────────
+      const sessionData = process.env.WHATSAPP_SESSION_DATA;
+      if (sessionData && !fs.existsSync(this._authFolder)) {
+        log.info('📦 Found WHATSAPP_SESSION_DATA; hydrating session folder...');
+        try {
+          fs.mkdirSync(this._authFolder, { recursive: true });
+          const decoded = JSON.parse(Buffer.from(sessionData, 'base64').toString('utf8'));
+          for (const [filename, content] of Object.entries(decoded)) {
+            fs.writeFileSync(path.join(this._authFolder, filename), content);
+          }
+          log.info('✅ Session folder hydrated successfully');
+        } catch (err) {
+          log.error('Failed to hydrate session from environment variable', { error: err.message });
+        }
+      }
+
       const { state, saveCreds } = await useMultiFileAuthState(this._authFolder);
       const { version } = await fetchLatestBaileysVersion();
 
@@ -64,7 +80,7 @@ class WhatsAppService {
         printQRInTerminal: false, // We handle it manually
         getMessage: async () => ({ conversation: '' }), // Memory optimization
         syncFullHistory: false,
-        generateHighQualityLinkPreview: false,
+        generateHighQualityLinkPreview: true, // Enabled for better looking deals
         connectTimeoutMs: 60_000,
         keepAliveIntervalMs: 30_000,
       });
@@ -113,7 +129,15 @@ class WhatsAppService {
             this._isReconnecting = false;
             setTimeout(() => this.init(), 10000);
           } else {
-            log.error('❌ Logged out. Delete wa-session folder and restart to re-scan QR.');
+            log.error('❌ Logged out. Automatically clearing wa-session folder...');
+            try {
+              if (fs.existsSync(this._authFolder)) {
+                fs.rmSync(this._authFolder, { recursive: true, force: true });
+                log.info('🗑️ wa-session folder cleared. Please restart the bot to generate a new code.');
+              }
+            } catch (err) {
+              log.error('Failed to clear wa-session folder', { error: err.message });
+            }
             this._isReconnecting = false;
           }
         }
