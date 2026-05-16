@@ -21,7 +21,7 @@ console.log(`[Config] Debug: Available Environment Keys: ${availableKeys.join(',
 
 const required = (key) => {
   let val = process.env[key];
-  
+
   // Remove any accidental double quotes from the value
   if (val) {
     val = val.replace(/^["'](.+)["']$/, '$1').trim();
@@ -117,9 +117,7 @@ const config = {
 };
 
 // ─── Validate TELEGRAM_API_ID separately (numeric) ──────────────────────────
-if (!process.env.TELEGRAM_API_ID) {
-  throw new Error('[Config] Missing required environment variable: TELEGRAM_API_ID');
-}
+
 if (Number.isNaN(config.telegram.apiId)) {
   throw new Error('[Config] TELEGRAM_API_ID must be a numeric value');
 }
