@@ -14,18 +14,33 @@ require('dotenv').config({ path: path.resolve(process.cwd(), '.env') });
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const required = (key) => {
-  const val = process.env[key];
-  if (!val || val.trim() === '') {
+  let val = process.env[key];
+  
+  // Remove any accidental double quotes from the value
+  if (val) {
+    val = val.replace(/^["'](.+)["']$/, '$1').trim();
+  }
+
+  if (!val || val === '') {
+    log.error(`[Config] Missing required environment variable: ${key}`);
     throw new Error(`[Config] Missing required environment variable: ${key}`);
   }
-  return val.trim();
+  return val;
 };
 
-const optional = (key, defaultValue = '') =>
-  (process.env[key] || defaultValue).toString().trim();
+const optional = (key, defaultValue = '') => {
+  let val = process.env[key];
+  if (val) {
+    val = val.replace(/^["'](.+)["']$/, '$1').trim();
+  }
+  return (val || defaultValue).toString();
+};
 
 const int = (key, defaultValue) => {
-  const raw = process.env[key];
+  let raw = process.env[key];
+  if (raw) {
+    raw = raw.replace(/^["'](.+)["']$/, '$1').trim();
+  }
   const parsed = raw ? parseInt(raw, 10) : defaultValue;
   if (Number.isNaN(parsed)) {
     throw new Error(`[Config] ${key} must be an integer, got: "${raw}"`);
@@ -34,7 +49,12 @@ const int = (key, defaultValue) => {
 };
 
 const bool = (key, defaultValue = false) => {
-  const raw = optional(key, String(defaultValue)).toLowerCase();
+  let raw = process.env[key];
+  if (raw) {
+    raw = raw.replace(/^["'](.+)["']$/, '$1').trim().toLowerCase();
+  } else {
+    raw = String(defaultValue).toLowerCase();
+  }
   return raw === 'true' || raw === '1';
 };
 
