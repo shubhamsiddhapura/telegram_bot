@@ -11,6 +11,12 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(process.cwd(), '.env') });
 
+// Deploy ID: force_deploy_v2
+
+// ─── Debug: Print available environment keys (NO VALUES) ──────────────────
+const availableKeys = Object.keys(process.env).filter(k => !k.startsWith('npm_') && !k.startsWith('NODE_'));
+console.log(`[Config] Debug: Available Environment Keys: ${availableKeys.join(', ')}`);
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const required = (key) => {

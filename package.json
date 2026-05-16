@@ -5,7 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "build": "echo 'No build step required'",
+    "build": "node scripts/check-env.js",
     "dev": "nodemon src/server.js",
     "qr": "node scan-qr.js",
     "lint": "eslint src/",
