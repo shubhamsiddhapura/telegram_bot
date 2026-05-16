@@ -65,60 +65,61 @@ class MessageProcessorService {
     const { valid: filteredUrls, blocked } = filterUrls(allUrls);
 
     if (blocked.length > 0) {
-      log.info('Amazon URLs blocked from conversion', { ...ctx, blocked });
+      log.info('Amazon URLs detected; skipping links', { ...ctx, blocked });
+    }
+
+    // If no valid URLs remain after filtering Amazon, skip the message
+    if (filteredUrls.length === 0) {
+      log.info('No valid non-Amazon URLs found; skipping message', ctx);
+      return;
     }
 
     // ── 4. Convert Links (EarnKaro) ───────────────────────────────────────────
     let finalContent = text;
 
-    if (allUrls.length > 0) {
-      // Safety cap
-      const capped = allUrls.slice(0, config.processing.maxUrlsPerMessage);
+    // Safety cap
+    const capped = filteredUrls.slice(0, config.processing.maxUrlsPerMessage);
 
-      // ── 4b. Deduplicate URLs check (Soft check now) ──────────────────────────
-      const freshUrls = await deduplicateUrls(capped);
+    // ── 4b. Deduplicate URLs check
+    const urlsToConvert = await deduplicateUrls(capped);
 
-      // We only attempt conversion if we have "valid" (non-Amazon) AND "fresh" (new) URLs
-      const { isAmazonUrl } = require('../utils/urlExtractor');
-      const urlsToConvert = freshUrls.filter(url => !isAmazonUrl(url));
+    if (urlsToConvert.length > 0) {
+      log.info('URLs to convert', { ...ctx, count: urlsToConvert.length, urls: urlsToConvert });
 
-      if (urlsToConvert.length > 0) {
-        log.info('URLs to convert', { ...ctx, count: urlsToConvert.length, urls: urlsToConvert });
+      // ── 5. Convert via EarnKaro ─────────────────────────────────────────────
+      const dealTextForConversion = this._buildDealTextForConversion(text, urlsToConvert);
 
-        // ── 5. Convert via EarnKaro ─────────────────────────────────────────────
-        const dealTextForConversion = this._buildDealTextForConversion(text, urlsToConvert);
+      const { convertedText, success: conversionSuccess, error: conversionError } =
+        await earnKaroService.convertDeal(dealTextForConversion);
 
-        const { convertedText, success: conversionSuccess, error: conversionError } =
-          await earnKaroService.convertDeal(dealTextForConversion);
+      if (conversionSuccess) {
+        // ── 5b. Detect EarnKaro "soft" errors ─────────────────────────────────
+        const earnKaroErrorPatterns = [
+          'could not locate',
+          'verify if the seller',
+          'not supported',
+          'unable to convert',
+        ];
+        const lowerConverted = convertedText.toLowerCase();
+        const isEarnKaroError = earnKaroErrorPatterns.some((p) => lowerConverted.includes(p));
 
-        if (conversionSuccess) {
-          // ── 5b. Detect EarnKaro "soft" errors ─────────────────────────────────
-          const earnKaroErrorPatterns = [
-            'could not locate',
-            'verify if the seller',
-            'not supported',
-            'unable to convert',
-          ];
-          const lowerConverted = convertedText.toLowerCase();
-          const isEarnKaroError = earnKaroErrorPatterns.some((p) => lowerConverted.includes(p));
-
-          if (!isEarnKaroError) {
-            finalContent = convertedText;
-          } else {
-            log.warn('EarnKaro returned a soft error; using original text', {
-              ...ctx,
-              response: convertedText.slice(0, 120),
-            });
-          }
+        if (!isEarnKaroError) {
+          finalContent = convertedText;
         } else {
-          log.error('Link conversion failed; using original text', {
+          log.warn('EarnKaro returned a soft error; using original text', {
             ...ctx,
-            error: conversionError,
+            response: convertedText.slice(0, 120),
           });
         }
       } else {
-        log.info('No fresh or non-Amazon URLs to convert; sending original text', ctx);
+        log.error('Link conversion failed; using original text', {
+          ...ctx,
+          error: conversionError,
+        });
       }
+    } else {
+      log.info('No fresh URLs to convert; skipping message to avoid duplication', ctx);
+      return;
     }
 
     log.info('Links ready', ctx);
