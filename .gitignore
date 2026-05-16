@@ -1,8 +1,39 @@
+# Dependency directories
 node_modules/
+jspm_packages/
+
+# Private Sessions (CRITICAL)
+wa-session/
+.telegram-session
+*.session
+*.session-journal
+
+# Environment variables
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
 logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Files
 .DS_Store
-coverage/
+Thumbs.db
+
+# Build/Dist
 dist/
-.nyc_output/
+build/
+out/
+.next/
+
+# Other
+.idea/
+.vscode/
+*.swp
+*.bak
