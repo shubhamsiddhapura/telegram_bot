@@ -160,49 +160,30 @@ class WhatsAppService {
    * Main method to send a message.
    * Now includes human-like pacing and quiet hours.
    */
-  async sendMessage(text, imageBuffer = null, meta = {}) {
-    // Wait for connection to be ready (up to 30 seconds)
-    let retryCount = 0;
-    while (!this._isReady && retryCount < 30) {
-      if (retryCount === 0) log.info('⏳ Waiting for WhatsApp connection to be ready...');
-      await sleep(1000);
-      retryCount++;
-    }
+  async sendMessage({ text, imageBuffer, chatId, messageId }) {
+    const ctx = { messageId, chatId };
 
-    if (!this._isReady) {
-      log.error('❌ WhatsApp service not ready after 30s. Skipping message.');
-      return { success: false, error: 'Service not ready' };
-    }
-
-    this._resetDailyIfNeeded();
-
-    // 1. Quiet Hours Check
-    if (this._enableAntiBan) {
-      while (this._isSleepTime()) {
-        const cur = this._getISTMinutes();
-        log.info(`🌙 Quiet hours in effect until ${Math.floor(this._todayStartTime / 60)}:${String(this._todayStartTime % 60).padStart(2, '0')} IST. Waiting...`);
-        await sleep(60000);
-        this._resetDailyIfNeeded();
+    if (!this._sock || !this._isReady) {
+      log.warn('⏳ Waiting for WhatsApp connection to be ready...', ctx);
+      // Wait up to 30s
+      for (let i = 0; i < 30; i++) {
+        if (this._sock && this._isReady) break;
+        await sleep(1000);
+      }
+      if (!this._isReady) {
+        log.error('❌ WhatsApp service not ready after 30s. Skipping message.', ctx);
+        throw new Error('WhatsApp not ready');
       }
     }
 
-    // 2. Big Break Check
-    if (this._enableAntiBan && this._shouldTakeBigBreak()) {
-      const breakTime = (12 + Math.random() * 8) * 60 * 1000;
-      log.info(`🧍 Taking a big break for ${(breakTime / 60000).toFixed(1)} minutes...`);
-      await sleep(breakTime);
-    }
+    // ─── Pacing Logic (Simple Delay Only) ──────────────────────────────────
+    
+    // We keep a small 1-2 second delay to avoid looking like a bot to WhatsApp
+    const delay = Math.floor(Math.random() * 1000) + 1000;
+    log.debug(`⏳ Anti-ban delay: ${Math.floor(delay / 1000)}s`);
+    await sleep(delay);
 
-    // 3. Smart Delay
-    if (this._enableAntiBan) {
-      const delay = this._getSmartDelay();
-      if (delay > 0) {
-        log.debug(`⏳ Anti-ban delay: ${Math.floor(delay / 1000)}s`);
-        await sleep(delay);
-      }
-    }
-
-    // 4. Actual Send
+    // ─── Actual Send ───────────────────────────────────────────────────────
     try {
       const jid = config.whatsapp.targetGroup;
       if (imageBuffer && imageBuffer.length > 0) {
