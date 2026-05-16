@@ -196,7 +196,7 @@ class WhatsAppService {
         await this._sock.sendMessage(jid, { text: text || '' });
       }
 
-      log.info('✅ WhatsApp message sent successfully', { ...meta });
+      log.info('✅ WhatsApp message sent successfully', ctx);
 
       // Explicit GC hint to release image buffers from memory
       if (global.gc) global.gc();
