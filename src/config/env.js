@@ -51,7 +51,7 @@ const int = (key, defaultValue) => {
   if (Number.isNaN(parsed)) {
     throw new Error(`[Config] ${key} must be an integer, got: "${raw}"`);
   }
-  return parsed;
+  return Number(parsed);
 };
 
 const bool = (key, defaultValue = false) => {

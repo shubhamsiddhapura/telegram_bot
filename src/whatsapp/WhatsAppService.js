@@ -123,8 +123,17 @@ class WhatsAppService {
    * Now includes human-like pacing and quiet hours.
    */
   async sendMessage(text, imageBuffer = null, meta = {}) {
+    // Wait for connection to be ready (up to 30 seconds)
+    let retryCount = 0;
+    while (!this._isReady && retryCount < 30) {
+      if (retryCount === 0) log.info('⏳ Waiting for WhatsApp connection to be ready...');
+      await sleep(1000);
+      retryCount++;
+    }
+
     if (!this._isReady) {
-      throw new Error('WhatsApp service not ready. Please scan QR code.');
+      log.error('❌ WhatsApp service not ready after 30s. Skipping message.');
+      return { success: false, error: 'Service not ready' };
     }
 
     this._resetDailyIfNeeded();
