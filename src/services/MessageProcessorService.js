@@ -126,18 +126,19 @@ class MessageProcessorService {
     // ── 6. Build final WhatsApp message ──────────────────────────────────────
     const finalMessage = this._buildFinalMessage(finalContent);
 
-    // ── 7. Send to WhatsApp ───────────────────────────────────────────────────
-    log.info('Final message built; dispatching to WhatsApp', {
-      ...ctx,
-      preview: finalMessage.slice(0, 100).replace(/\n/g, ' '),
-      hasImage: !!image,
-    });
+    // ── 6. Send to WhatsApp ──────────────────────────────────────────────────
+    log.info('Final message built; dispatching to WhatsApp', ctx);
 
-    const { success: sendSuccess, error: sendError } =
-      await whatsAppService.sendMessage(finalMessage, image, ctx);
-
-    if (!sendSuccess) {
-      log.error('WhatsApp send failed', { ...ctx, error: sendError });
+    try {
+      await whatsAppService.sendMessage({
+        text: finalMessage,
+        imageBuffer: image,
+        chatId,
+        messageId
+      });
+      log.info('Message sent successfully', ctx);
+    } catch (err) {
+      log.error('WhatsApp send failed', { ...ctx, error: err.message });
       return;
     }
 
