@@ -39,6 +39,7 @@ class WhatsAppService {
     this._breaks = [];
     this._lastPauseHour = null;
 
+    this._pairingCodeRequested = false;
     this._generateDailyBreaks();
   }
 
@@ -80,7 +81,8 @@ class WhatsAppService {
         if (qr && !config.whatsapp.phoneNumber) {
           log.info('📱 WhatsApp QR Code received. Please scan in Linked Devices:');
           qrcode.generate(qr, { small: true });
-        } else if (qr && config.whatsapp.phoneNumber && !this._sock.authState.creds.registered) {
+        } else if (qr && config.whatsapp.phoneNumber && !this._sock.authState.creds.registered && !this._pairingCodeRequested) {
+          this._pairingCodeRequested = true;
           setTimeout(async () => {
             try {
               const code = await this._sock.requestPairingCode(config.whatsapp.phoneNumber.replace(/\D/g, ''));
@@ -88,6 +90,7 @@ class WhatsAppService {
               log.info('Go to WhatsApp > Linked Devices > Link with Phone Number and enter this code.');
             } catch (err) {
               log.error('Failed to get pairing code', { error: err.message });
+              this._pairingCodeRequested = false; // Allow retry on failure
             }
           }, 5000);
         }
