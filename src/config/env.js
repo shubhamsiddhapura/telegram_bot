@@ -22,7 +22,7 @@ const required = (key) => {
   }
 
   if (!val || val === '') {
-    log.error(`[Config] Missing required environment variable: ${key}`);
+    console.error(`[Config] Missing required environment variable: ${key}`);
     throw new Error(`[Config] Missing required environment variable: ${key}`);
   }
   return val;
