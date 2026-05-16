@@ -75,7 +75,7 @@ const config = {
 
   // ── Telegram ──────────────────────────────────────────────
   telegram: {
-    apiId: int('TELEGRAM_API_ID', null),
+    apiId: required('TELEGRAM_API_ID', null),
     apiHash: required('TELEGRAM_API_HASH'),
     stringSession: required('TELEGRAM_STRING_SESSION'),
     allowedChats: optional('TELEGRAM_ALLOWED_CHATS', '')
