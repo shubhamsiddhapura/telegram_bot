@@ -77,9 +77,19 @@ class WhatsAppService {
       });
 
       this._sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-        if (qr) {
+        if (qr && !config.whatsapp.phoneNumber) {
           log.info('📱 WhatsApp QR Code received. Please scan in Linked Devices:');
           qrcode.generate(qr, { small: true });
+        } else if (qr && config.whatsapp.phoneNumber && !this._sock.authState.creds.registered) {
+          setTimeout(async () => {
+            try {
+              const code = await this._sock.requestPairingCode(config.whatsapp.phoneNumber.replace(/\D/g, ''));
+              log.info(`🔑 WHATSAPP PAIRING CODE: ${code}`);
+              log.info('Go to WhatsApp > Linked Devices > Link with Phone Number and enter this code.');
+            } catch (err) {
+              log.error('Failed to get pairing code', { error: err.message });
+            }
+          }, 5000);
         }
 
         if (connection === 'open') {

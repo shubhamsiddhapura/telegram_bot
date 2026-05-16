@@ -99,6 +99,7 @@ const config = {
   whatsapp: {
     secret: optional('WHATSAPP_SECRET', 'mysecret123'),
     targetGroup: required('WHATSAPP_TARGET_GROUP'),
+    phoneNumber: optional('WHATSAPP_PHONE_NUMBER', ''),
     timeoutMs: int('WHATSAPP_TIMEOUT_MS', 10_000),
     maxRetries: int('WHATSAPP_MAX_RETRIES', 3),
   },
