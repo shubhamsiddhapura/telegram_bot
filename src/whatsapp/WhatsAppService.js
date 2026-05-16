@@ -40,6 +40,7 @@ class WhatsAppService {
     this._lastPauseHour = null;
 
     this._pairingCodeRequested = false;
+    this._enableAntiBan = config.nodeEnv === 'production'; // Only enable by default in production
     this._generateDailyBreaks();
   }
 
@@ -152,25 +153,29 @@ class WhatsAppService {
     this._resetDailyIfNeeded();
 
     // 1. Quiet Hours Check
-    while (this._isSleepTime()) {
-      const cur = this._getISTMinutes();
-      log.info(`🌙 Quiet hours in effect until ${Math.floor(this._todayStartTime / 60)}:${String(this._todayStartTime % 60).padStart(2, '0')} IST. Waiting...`);
-      await sleep(60000);
-      this._resetDailyIfNeeded();
+    if (this._enableAntiBan) {
+      while (this._isSleepTime()) {
+        const cur = this._getISTMinutes();
+        log.info(`🌙 Quiet hours in effect until ${Math.floor(this._todayStartTime / 60)}:${String(this._todayStartTime % 60).padStart(2, '0')} IST. Waiting...`);
+        await sleep(60000);
+        this._resetDailyIfNeeded();
+      }
     }
 
     // 2. Big Break Check
-    if (this._shouldTakeBigBreak()) {
+    if (this._enableAntiBan && this._shouldTakeBigBreak()) {
       const breakTime = (12 + Math.random() * 8) * 60 * 1000;
       log.info(`🧍 Taking a big break for ${(breakTime / 60000).toFixed(1)} minutes...`);
       await sleep(breakTime);
     }
 
     // 3. Smart Delay
-    const delay = this._getSmartDelay();
-    if (delay > 0) {
-      log.debug(`⏳ Anti-ban delay: ${Math.floor(delay / 1000)}s`);
-      await sleep(delay);
+    if (this._enableAntiBan) {
+      const delay = this._getSmartDelay();
+      if (delay > 0) {
+        log.debug(`⏳ Anti-ban delay: ${Math.floor(delay / 1000)}s`);
+        await sleep(delay);
+      }
     }
 
     // 4. Actual Send
@@ -233,14 +238,18 @@ class WhatsAppService {
 
   _generateDailyBreaks() {
     this._breaks = [];
+    const currentMin = this._getISTMinutes();
+
     const addBreaks = (count, start, end) => {
       for (let i = 0; i < count; i++) {
-        this._breaks.push({ time: Math.floor(Math.random() * (end - start)) + start, taken: false });
+        const time = Math.floor(Math.random() * (end - start)) + start;
+        // Mark as taken if it was scheduled for earlier today
+        this._breaks.push({ time, taken: time < currentMin });
       }
     };
-    addBreaks(3, 8 * 60, 14 * 60);
+    addBreaks(2, 9 * 60, 14 * 60); // Reduced frequency
     addBreaks(2, 14 * 60, 20 * 60);
-    addBreaks(1, 20 * 60, 24 * 60);
+    addBreaks(1, 20 * 60, 23 * 60);
     this._breaks.sort((a, b) => a.time - b.time);
   }
 
@@ -256,11 +265,12 @@ class WhatsAppService {
 
   _getSmartDelay() {
     const currentHour = new Date().getHours();
-    if (this._lastPauseHour !== currentHour && Math.random() < 0.4) {
+    // Reduced frequency and duration of pauses
+    if (this._lastPauseHour !== currentHour && Math.random() < 0.2) {
       this._lastPauseHour = currentHour;
-      return (2 + Math.random()) * 60 * 1000; // 2-3 minute pause once an hour
+      return (1 + Math.random()) * 30 * 1000; // 30-60 second pause
     }
-    return Math.floor(Math.random() * 3000) + 3000; // 3-6 second random delay
+    return Math.floor(Math.random() * 1000) + 1000; // 1-2 second random delay
   }
 
   _shouldTakeBigBreak() {

@@ -246,9 +246,9 @@ class TelegramService extends EventEmitter {
 
       try {
         log.info(`Scanning history for chat: ${chatId}`);
-        // Fetch only the very last message to be safe
+        // Fetch the last 10 messages to catch up on missed deals
         const messages = await this._client.getMessages(chatId, {
-          limit: 1,
+          limit: 10,
         });
 
         if (!messages || messages.length === 0) continue;
@@ -258,9 +258,9 @@ class TelegramService extends EventEmitter {
 
         for (const msg of messages) {
           const age = now - (msg.date || 0);
-          
+
           if (age > FIFTEEN_MINUTES) {
-            log.debug('Skipping historical message (too old)', { 
+            log.debug('Skipping historical message (too old)', {
               messageId: `${chatId}:${msg.id}`,
               ageMinutes: Math.floor(age / 60)
             });

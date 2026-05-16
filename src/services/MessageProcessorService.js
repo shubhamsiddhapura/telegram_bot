@@ -54,7 +54,7 @@ class MessageProcessorService {
     // ── 2b. Amazon Filter (Skip whole message) ───────────────────────────────
     const { isAmazonUrl } = require('../utils/urlExtractor');
     const hasAmazonLink = allUrls.some(url => isAmazonUrl(url));
-    
+
     if (hasAmazonLink) {
       log.info('Message contains Amazon link; skipping whole message as requested', ctx);
       return;
@@ -84,7 +84,7 @@ class MessageProcessorService {
     if (allUrls.length > 0) {
       // Safety cap
       const capped = allUrls.slice(0, config.processing.maxUrlsPerMessage);
-      
+
       // ── 4b. Deduplicate URLs check (Soft check now) ──────────────────────────
       const freshUrls = await deduplicateUrls(capped);
 
