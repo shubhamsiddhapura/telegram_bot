@@ -157,22 +157,41 @@ class TelegramService extends EventEmitter {
    */
   async _handleMessage(message) {
     try {
-      // Allow messages with either text OR photo media
-      if (!message || (!message.text && !message.photo)) return;
+      if (!message) return;
 
       const chatId = message.chatId?.toString() ?? 'unknown';
       const messageId = `${chatId}:${message.id}`;
 
       // ─── Whitelist check ───────────────────────────────────────────────────
       const allowedChats = config.telegram.allowedChats;
-      if (allowedChats.length > 0 && !allowedChats.includes(chatId)) {
+      // Allow matches with or without the '-100' channel prefix
+      const isAllowed = allowedChats.some(
+        (id) => chatId === id || chatId === `-100${id}` || `-100${chatId}` === id
+      );
+      if (allowedChats.length > 0 && !isAllowed) {
         return;
       }
 
       log.info('Incoming message for processing', { chatId, messageId });
 
       const chatTitle = await this._resolveChatTitle(message);
-      const text = message.text || '';
+      
+      // Get raw text
+      let text = message.message || message.text || '';
+
+      // Extract hidden URLs from text entities and append to text so they can be processed and forwarded
+      if (message.entities) {
+        for (const entity of message.entities) {
+          if (entity.className === 'MessageEntityTextUrl' && entity.url) {
+            if (!text.includes(entity.url)) {
+              text += `\n${entity.url}`;
+            }
+          }
+        }
+      }
+
+      // Allow messages with text, photo, video, or document
+      if (!text && !message.photo && !message.video && !message.document) return;
 
       // ─── Media Handling ────────────────────────────────────────────────────
       let imageBuffer = null;
@@ -267,7 +286,12 @@ class TelegramService extends EventEmitter {
             continue;
           }
 
-          if (msg.text && /https?:\/\//.test(msg.text)) {
+          let hasUrl = false;
+          if (msg.message && /https?:\/\//.test(msg.message)) hasUrl = true;
+          if (msg.text && /https?:\/\//.test(msg.text)) hasUrl = true;
+          if (msg.entities && msg.entities.some(e => e.className === 'MessageEntityTextUrl')) hasUrl = true;
+
+          if (hasUrl) {
             await this._handleMessage(msg);
           }
         }
