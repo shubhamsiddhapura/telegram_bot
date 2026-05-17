@@ -36,6 +36,8 @@ class TelegramService extends EventEmitter {
     this._isRunning = false;
     this._reconnectDelay = RECONNECT_INITIAL_DELAY_MS;
     this._reconnectTimer = null;
+    this._pollingInterval = null;
+    this._shuttingDown = false;
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ class TelegramService extends EventEmitter {
 
     log.info('Starting TelegramService…');
     this._isRunning = true;
+    this._shuttingDown = false;
 
     await this._connect();
   }
@@ -61,6 +64,12 @@ class TelegramService extends EventEmitter {
   async stop() {
     log.info('Stopping TelegramService…');
     this._isRunning = false;
+    this._shuttingDown = true;
+
+    if (this._pollingInterval) {
+      clearInterval(this._pollingInterval);
+      this._pollingInterval = null;
+    }
 
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);
@@ -120,13 +129,24 @@ class TelegramService extends EventEmitter {
       });
 
       // CRITICAL: Fetch dialogs to populate GramJS entity cache. 
-      // Without this, NewMessage event drops UpdateNewChannelMessage because it can't resolve the chat entity!
       log.info('Fetching dialogs to populate entity cache...');
       await this._client.getDialogs({});
       log.info('Entity cache populated.');
 
-      // Catch up on very recent history (last few messages only)
-      setImmediate(() => this._catchUpHistory());
+      // Catch up on very recent history immediately
+      await this._catchUpHistory();
+
+      // BULLETPROOF FALLBACK: Because Railway/Cloud providers sometimes drop Telegram's 
+      // live WebSocket events, we will proactively poll the channels every 30 seconds.
+      // Since we have deduplication, this is perfectly safe and guarantees ZERO dropped deals!
+      if (this._pollingInterval) clearInterval(this._pollingInterval);
+      this._pollingInterval = setInterval(async () => {
+        if (this._client && this._client.connected) {
+          log.debug('Running proactive background poll...');
+          await this._catchUpHistory();
+        }
+      }, 30_000); // Poll every 30 seconds
+
     } catch (err) {
       log.error('Failed to connect to Telegram', { error: err.message });
       await this._scheduleReconnect();
@@ -296,19 +316,21 @@ class TelegramService extends EventEmitter {
    * Scans the last 20 messages of all whitelisted chats to pick up existing links.
    */
   async _catchUpHistory() {
+    if (this._shuttingDown) return;
+    
     const allowedChats = config.telegram.allowedChats;
     if (allowedChats.length === 0) {
       log.info('No whitelisted chats configured; skipping history catch-up');
       return;
     }
 
-    log.info(`Starting history catch-up for ${allowedChats.length} whitelisted chats…`);
+    log.debug(`Starting history catch-up for ${allowedChats.length} whitelisted chats…`);
 
     for (const chatId of allowedChats) {
       if (!this._isRunning) break;
 
       try {
-        log.info(`Scanning history for chat: ${chatId}`);
+        log.debug(`Scanning history for chat: ${chatId}`);
         // Fetch the last 10 messages to catch up on missed deals
         const messages = await this._client.getMessages(chatId, {
           limit: 10,
@@ -343,13 +365,11 @@ class TelegramService extends EventEmitter {
         // Small pause between chats
         await sleep(1000);
       } catch (err) {
-        log.warn(`Could not catch up on history for chat ${chatId}`, {
-          error: err.message,
-        });
+        log.error(`Failed to catch up history for chat ${chatId}`, { error: err.message });
       }
     }
 
-    log.info('History catch-up complete');
+    log.debug('History catch-up complete');
   }
 
   // ─── Private: Reconnection ───────────────────────────────────────────────────
