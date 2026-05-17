@@ -51,34 +51,15 @@ class MessageProcessorService {
     // ── 2. Extract URLs ──────────────────────────────────────────────────────
     const allUrls = extractUrls(text || '');
 
-    // ── 2c. URL presence check ───────────────────────────────────────────────
-    if (allUrls.length === 0) {
-      log.debug('No URLs found in message; skipping as requested', ctx);
-      return;
-    }
-
     if (allUrls.length > 0) {
       log.info('URLs extracted', { ...ctx, count: allUrls.length, urls: allUrls });
     }
 
-    // 3. Filter Amazon + cap ───────────────────────────────────────────────
-    const { valid: filteredUrls, blocked } = filterUrls(allUrls);
-
-    if (blocked.length > 0) {
-      log.info('Amazon URLs detected; skipping links', { ...ctx, blocked });
-    }
-
-    // If no valid URLs remain after filtering Amazon, skip the message
-    if (filteredUrls.length === 0) {
-      log.info('No valid non-Amazon URLs found; skipping message', ctx);
-      return;
-    }
-
-    // ── 4. Convert Links (EarnKaro) ───────────────────────────────────────────
+    // ── 3. Convert Links (EarnKaro) ───────────────────────────────────────────
     let finalContent = text;
 
     // Safety cap
-    const capped = filteredUrls.slice(0, config.processing.maxUrlsPerMessage);
+    const capped = allUrls.slice(0, config.processing.maxUrlsPerMessage);
 
     // ── 4b. Deduplicate URLs check
     const urlsToConvert = await deduplicateUrls(capped);
@@ -118,8 +99,7 @@ class MessageProcessorService {
         });
       }
     } else {
-      log.info('No fresh URLs to convert; skipping message to avoid duplication', ctx);
-      return;
+      log.info('No URLs to convert; proceeding with original message content', ctx);
     }
 
     log.info('Links ready', ctx);
@@ -160,24 +140,7 @@ class MessageProcessorService {
   _buildDealTextForConversion(originalText, urlsToConvert) {
     if (!originalText) return urlsToConvert.join('\n');
 
-    // Strip Amazon/blocked URLs from the text so EarnKaro only sees
-    // the URLs it can actually convert. Without this, EarnKaro would
-    // hit an unsupported seller and return a "could not locate" error.
-    const { extractUrls, isAmazonUrl } = require('../utils/urlExtractor');
-    const allUrls = extractUrls(originalText);
-
-    let cleanedText = originalText;
-    for (const url of allUrls) {
-      if (isAmazonUrl(url)) {
-        // Remove the Amazon URL from the text
-        cleanedText = cleanedText.replace(url, '');
-      }
-    }
-
-    // Clean up any leftover blank lines from removed URLs
-    cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
-
-    return cleanedText || urlsToConvert.join('\n');
+    return originalText || urlsToConvert.join('\n');
   }
 
   /**

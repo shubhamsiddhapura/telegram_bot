@@ -13,7 +13,7 @@
 
 const { TelegramClient, Logger: GramLogger } = require('telegram');
 const { StringSession } = require('telegram/sessions');
-const { NewMessage } = require('telegram/events');
+const { NewMessage, EditedMessage } = require('telegram/events');
 const { EventEmitter } = require('events');
 
 const config = require('../config/env');
@@ -147,7 +147,14 @@ class TelegramService extends EventEmitter {
         log.debug(`Raw Telegram update: ${className}`);
       }
 
-      if (className === 'UpdateNewChannelMessage' || className === 'UpdateNewMessage') {
+      if (
+        className === 'UpdateNewChannelMessage' || 
+        className === 'UpdateNewMessage' || 
+        className === 'UpdateEditChannelMessage' || 
+        className === 'UpdateEditMessage' ||
+        className === 'UpdateShortMessage' ||
+        className === 'UpdateShortChatMessage'
+      ) {
         if (event.message) {
           try {
             await this._handleMessage(event.message);
@@ -164,6 +171,16 @@ class TelegramService extends EventEmitter {
         await this._handleMessage(event.message);
       },
       new NewMessage({}), // No filters, catch all
+    );
+
+    // 3. Handler for Edited Messages (critical for deal channels that post then edit)
+    this._client.addEventHandler(
+      async (event) => {
+        if (event.message) {
+          await this._handleMessage(event.message);
+        }
+      },
+      new EditedMessage({}), // No filters, catch all
     );
 
     log.info('Telegram message listener registered');
