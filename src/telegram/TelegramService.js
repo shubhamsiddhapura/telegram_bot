@@ -88,20 +88,25 @@ class TelegramService extends EventEmitter {
 
   async _connect() {
     try {
-      const session = new StringSession(config.telegram.stringSession);
+      if (!this._client) {
+        const session = new StringSession(config.telegram.stringSession);
 
-      this._client = new TelegramClient(
-        session,
-        config.telegram.apiId,
-        config.telegram.apiHash,
-        {
-          connectionRetries: 5,
-          retryDelay: 1_000,
-          autoReconnect: true,
-          // Suppress the interactive login prompt — we have a pre-existing session
-          baseLogger: this._buildGramLogger(),
-        },
-      );
+        this._client = new TelegramClient(
+          session,
+          config.telegram.apiId,
+          config.telegram.apiHash,
+          {
+            connectionRetries: 5,
+            retryDelay: 1_000,
+            autoReconnect: true,
+            // Suppress the interactive login prompt — we have a pre-existing session
+            baseLogger: this._buildGramLogger(),
+          },
+        );
+        
+        // Register handlers once
+        this._registerEventHandlers();
+      }
 
       log.info('Connecting to Telegram…');
 
@@ -113,12 +118,6 @@ class TelegramService extends EventEmitter {
         username: me.username,
         id: me.id?.toString(),
       });
-
-      // Reset backoff on successful connect
-      this._reconnectDelay = RECONNECT_INITIAL_DELAY_MS;
-
-      this._registerEventHandlers();
-      this._monitorConnection();
 
       // Catch up on very recent history (last few messages only)
       setImmediate(() => this._catchUpHistory());
@@ -133,11 +132,20 @@ class TelegramService extends EventEmitter {
   _registerEventHandlers() {
     if (!this._client) return;
 
-    // 1. Listen for ALL updates for debugging purposes
-    this._client.addEventHandler((event) => {
+    // 1. Listen for ALL updates for debugging purposes and bulletproof raw message catching
+    this._client.addEventHandler(async (event) => {
       const className = event.className || event.constructor.name;
-      // We use debug level for the flood of updates, but info if it's something we might care about
       log.debug(`Raw Telegram update: ${className}`);
+
+      if (className === 'UpdateNewChannelMessage' || className === 'UpdateNewMessage') {
+        if (event.message) {
+          try {
+            await this._handleMessage(event.message);
+          } catch (err) {
+            log.error('Fallback message handler error', { error: err.message });
+          }
+        }
+      }
     });
 
     // 2. Specific handler for New Messages using the recommended NewMessage event class
@@ -159,7 +167,13 @@ class TelegramService extends EventEmitter {
     try {
       if (!message) return;
 
-      const chatId = message.chatId?.toString() ?? 'unknown';
+      let chatIdStr = message.chatId?.toString();
+      if (!chatIdStr && message.peerId) {
+        if (message.peerId.channelId) chatIdStr = message.peerId.channelId.toString();
+        else if (message.peerId.chatId) chatIdStr = message.peerId.chatId.toString();
+        else if (message.peerId.userId) chatIdStr = message.peerId.userId.toString();
+      }
+      const chatId = chatIdStr ?? 'unknown';
       const messageId = `${chatId}:${message.id}`;
 
       // ─── Whitelist check ───────────────────────────────────────────────────
@@ -309,27 +323,6 @@ class TelegramService extends EventEmitter {
   }
 
   // ─── Private: Reconnection ───────────────────────────────────────────────────
-
-  _monitorConnection() {
-    // GramJS fires a 'disconnected' event when the connection drops
-    if (!this._client) return;
-
-    // Poll connection health every 30 s
-    const HEALTH_CHECK_INTERVAL = 30_000;
-
-    const interval = setInterval(async () => {
-      if (!this._isRunning) {
-        clearInterval(interval);
-        return;
-      }
-
-      if (!this._client.connected) {
-        log.warn('Telegram client disconnected; scheduling reconnect');
-        clearInterval(interval);
-        await this._scheduleReconnect();
-      }
-    }, HEALTH_CHECK_INTERVAL);
-  }
 
   async _scheduleReconnect() {
     if (!this._isRunning) return;
