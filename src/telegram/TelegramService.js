@@ -119,6 +119,12 @@ class TelegramService extends EventEmitter {
         id: me.id?.toString(),
       });
 
+      // CRITICAL: Fetch dialogs to populate GramJS entity cache. 
+      // Without this, NewMessage event drops UpdateNewChannelMessage because it can't resolve the chat entity!
+      log.info('Fetching dialogs to populate entity cache...');
+      await this._client.getDialogs({});
+      log.info('Entity cache populated.');
+
       // Catch up on very recent history (last few messages only)
       setImmediate(() => this._catchUpHistory());
     } catch (err) {
@@ -135,7 +141,11 @@ class TelegramService extends EventEmitter {
     // 1. Listen for ALL updates for debugging purposes and bulletproof raw message catching
     this._client.addEventHandler(async (event) => {
       const className = event.className || event.constructor.name;
-      log.debug(`Raw Telegram update: ${className}`);
+      
+      // Hide harmless connection state logs to prevent log spam and confusion
+      if (className !== 'UpdateConnectionState') {
+        log.debug(`Raw Telegram update: ${className}`);
+      }
 
       if (className === 'UpdateNewChannelMessage' || className === 'UpdateNewMessage') {
         if (event.message) {
@@ -182,6 +192,9 @@ class TelegramService extends EventEmitter {
       const isAllowed = allowedChats.some(
         (id) => chatId === id || chatId === `-100${id}` || `-100${chatId}` === id
       );
+      
+      log.debug(`Evaluating message ${messageId} from chatId: ${chatId}. Whitelist status: ${isAllowed}`);
+      
       if (allowedChats.length > 0 && !isAllowed) {
         return;
       }
