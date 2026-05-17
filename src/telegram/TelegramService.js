@@ -212,7 +212,7 @@ class TelegramService extends EventEmitter {
       if (message.photo) {
         log.debug('Downloading photo from Telegram...', { messageId });
         try {
-          imageBuffer = await this._client.downloadMedia(message.photo, {});
+          imageBuffer = await this._client.downloadMedia(message.photo, { workers: 1 });
           log.info('Photo downloaded successfully', { messageId, size: imageBuffer.length });
         } catch (mediaErr) {
           log.warn('Failed to download photo', { messageId, error: mediaErr.message });
