@@ -60,6 +60,16 @@ class MessageProcessorService {
 
     // Remove Amazon links first, then cap the remaining URLs.
     const { valid: eligibleUrls, blocked: blockedUrls } = filterUrls(allUrls);
+
+    if (blockedUrls.length > 0) {
+      log.info('Skipping message because it contains Amazon links', {
+        ...ctx,
+        blockedCount: blockedUrls.length,
+        blockedUrls,
+      });
+      return;
+    }
+
     const capped = eligibleUrls.slice(0, config.processing.maxUrlsPerMessage);
 
     // ── 4b. Deduplicate URLs check
@@ -184,8 +194,6 @@ class MessageProcessorService {
    */
   _buildFinalMessage(convertedText) {
     const lines = [
-      '🔥 *New Deal Alert!*',
-      '',
       convertedText.trim(),
     ];
     return lines.join('\n');
