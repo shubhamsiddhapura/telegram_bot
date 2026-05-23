@@ -58,11 +58,13 @@ class MessageProcessorService {
     // ── 3. Convert Links (EarnKaro) ───────────────────────────────────────────
     let finalContent = text;
 
-    // Safety cap
-    const capped = allUrls.slice(0, config.processing.maxUrlsPerMessage);
+    // Remove Amazon links first, then cap the remaining URLs.
+    const { valid: eligibleUrls, blocked: blockedUrls } = filterUrls(allUrls);
+    const capped = eligibleUrls.slice(0, config.processing.maxUrlsPerMessage);
 
     // ── 4b. Deduplicate URLs check
     const urlsToConvert = await deduplicateUrls(capped);
+    const urlsToRemove = allUrls.filter((url) => !urlsToConvert.includes(url));
 
     if (urlsToConvert.length > 0) {
       log.info('URLs to convert', { ...ctx, count: urlsToConvert.length, urls: urlsToConvert });
@@ -102,10 +104,21 @@ class MessageProcessorService {
       log.info('No URLs to convert; proceeding with original message content', ctx);
     }
 
+    const cleanedContent = this._removeUrlsFromText(finalContent, urlsToRemove);
+
+    if (!cleanedContent.trim()) {
+      log.info('No sendable content after filtering; skipping WhatsApp send', {
+        ...ctx,
+        blockedCount: blockedUrls.length,
+        removedCount: urlsToRemove.length,
+      });
+      return;
+    }
+
     log.info('Links ready', ctx);
 
     // ── 6. Build final WhatsApp message ──────────────────────────────────────
-    const finalMessage = this._buildFinalMessage(finalContent);
+    const finalMessage = this._buildFinalMessage(cleanedContent);
 
     // ── 6. Send to WhatsApp ──────────────────────────────────────────────────
     log.info('Final message built; dispatching to WhatsApp', ctx);
@@ -141,6 +154,25 @@ class MessageProcessorService {
     if (!originalText) return urlsToConvert.join('\n');
 
     return originalText || urlsToConvert.join('\n');
+  }
+
+  /**
+   * Removes filtered URLs from the text before sending.
+   *
+   * @param {string} text
+   * @param {string[]} urlsToRemove
+   * @returns {string}
+   */
+  _removeUrlsFromText(text, urlsToRemove) {
+    if (!text || !urlsToRemove || urlsToRemove.length === 0) {
+      return text || '';
+    }
+
+    const replacements = new Map(urlsToRemove.map((url) => [url, '']));
+    return replaceUrls(text, replacements)
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   /**
