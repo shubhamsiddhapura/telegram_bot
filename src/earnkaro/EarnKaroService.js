@@ -112,6 +112,12 @@ class EarnKaroService {
     // Handle different possible response shapes
     if (typeof responseData === 'string') return responseData;
 
+    // EarnKaro's actual response: { success: 1, data: "converted text", randomPostID: "..." }
+    if (responseData?.success && responseData?.data != null) {
+      if (typeof responseData.data === 'string') return responseData.data;
+      if (typeof responseData.data === 'object' && responseData.data.deal) return responseData.data.deal;
+    }
+
     if (responseData?.data?.deal) return responseData.data.deal;
     if (typeof responseData?.data === 'string') return responseData.data;
     if (responseData?.deal) return responseData.deal;

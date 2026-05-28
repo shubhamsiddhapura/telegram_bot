@@ -243,14 +243,53 @@ class TelegramService extends EventEmitter {
       // Get raw text
       let text = message.message || message.text || '';
 
-      // Extract hidden URLs from text entities and append to text so they can be processed and forwarded
+      // ─── Extract ALL hidden URLs and merge them into the text ────────────
+      // Links can be in 3 places: visible text, text entities, or inline buttons.
+
+      // (A) Hidden text-entity URLs (MessageEntityTextUrl) — insert inline
       if (message.entities) {
-        for (const entity of message.entities) {
-          if (entity.className === 'MessageEntityTextUrl' && entity.url) {
-            if (!text.includes(entity.url)) {
-              text += `\n${entity.url}`;
+        const hiddenUrlEntities = message.entities
+          .filter(e => e.className === 'MessageEntityTextUrl' && e.url && !text.includes(e.url));
+
+        if (hiddenUrlEntities.length > 0) {
+          log.debug('Found hidden text-entity URLs', {
+            messageId,
+            count: hiddenUrlEntities.length,
+            urls: hiddenUrlEntities.map(e => e.url),
+          });
+        }
+
+        // Process in REVERSE offset order so earlier insertions don't shift later offsets
+        hiddenUrlEntities
+          .sort((a, b) => (b.offset ?? 0) - (a.offset ?? 0))
+          .forEach(entity => {
+            const insertPos = (entity.offset ?? 0) + (entity.length ?? 0);
+            text = text.slice(0, insertPos) + ' ' + entity.url + text.slice(insertPos);
+          });
+      }
+
+      // (B) Inline keyboard button URLs (replyMarkup) — append at the end
+      //     Many deal channels (Myntra, AJIO, etc.) put links in buttons below the message.
+      if (message.replyMarkup && message.replyMarkup.rows) {
+        const buttonUrls = [];
+        for (const row of message.replyMarkup.rows) {
+          if (!row.buttons) continue;
+          for (const btn of row.buttons) {
+            // KeyboardButtonUrl has a .url, KeyboardButtonCallback does not
+            const btnUrl = btn.url || btn.data?.toString();
+            if (btnUrl && /^https?:\/\//i.test(btnUrl) && !text.includes(btnUrl)) {
+              buttonUrls.push(btnUrl);
             }
           }
+        }
+        if (buttonUrls.length > 0) {
+          log.info('Found URLs in inline keyboard buttons', {
+            messageId,
+            count: buttonUrls.length,
+            urls: buttonUrls,
+          });
+          // Append button URLs to the text so they get processed and forwarded
+          text += '\n' + buttonUrls.join('\n');
         }
       }
 
@@ -356,6 +395,19 @@ class TelegramService extends EventEmitter {
           if (msg.message && /https?:\/\//.test(msg.message)) hasUrl = true;
           if (msg.text && /https?:\/\//.test(msg.text)) hasUrl = true;
           if (msg.entities && msg.entities.some(e => e.className === 'MessageEntityTextUrl')) hasUrl = true;
+          // Also check inline keyboard buttons for URLs
+          if (!hasUrl && msg.replyMarkup && msg.replyMarkup.rows) {
+            for (const row of msg.replyMarkup.rows) {
+              if (!row.buttons) continue;
+              for (const btn of row.buttons) {
+                if ((btn.url || btn.data?.toString() || '').match(/^https?:\/\//i)) {
+                  hasUrl = true;
+                  break;
+                }
+              }
+              if (hasUrl) break;
+            }
+          }
 
           if (hasUrl) {
             await this._handleMessage(msg);

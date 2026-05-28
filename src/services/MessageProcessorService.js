@@ -18,6 +18,7 @@
 const config = require('../config/env');
 const logger = require('../utils/logger');
 const { extractUrls, filterUrls, replaceUrls } = require('../utils/urlExtractor');
+const { formatDealMessage } = require('../utils/MessageFormatter');
 const { isMessageDuplicate, deduplicateUrls } = require('../helpers/dedup');
 const earnKaroService = require('../earnkaro/EarnKaroService');
 const whatsAppService = require('../whatsapp/WhatsAppService');
@@ -56,7 +57,7 @@ class MessageProcessorService {
     }
 
     // ── 3. Convert Links (EarnKaro) ───────────────────────────────────────────
-    let finalContent = text;
+    let finalContent = null; // stays null unless conversion succeeds
 
     // Remove Amazon links first, then cap the remaining URLs.
     const { valid: eligibleUrls, blocked: blockedUrls } = filterUrls(allUrls);
@@ -70,65 +71,71 @@ class MessageProcessorService {
       return;
     }
 
+    // If the message has no URLs at all, skip it — only send converted deal messages
+    if (eligibleUrls.length === 0) {
+      log.info('Skipping message — no URLs found, nothing to convert', ctx);
+      return;
+    }
+
     const capped = eligibleUrls.slice(0, config.processing.maxUrlsPerMessage);
 
     // ── 4b. Deduplicate URLs check
     const urlsToConvert = await deduplicateUrls(capped);
-    const urlsToRemove = allUrls.filter((url) => !urlsToConvert.includes(url));
 
-    if (urlsToConvert.length > 0) {
-      log.info('URLs to convert', { ...ctx, count: urlsToConvert.length, urls: urlsToConvert });
-
-      // ── 5. Convert via EarnKaro ─────────────────────────────────────────────
-      const dealTextForConversion = this._buildDealTextForConversion(text, urlsToConvert);
-
-      const { convertedText, success: conversionSuccess, error: conversionError } =
-        await earnKaroService.convertDeal(dealTextForConversion);
-
-      if (conversionSuccess) {
-        // ── 5b. Detect EarnKaro "soft" errors ─────────────────────────────────
-        const earnKaroErrorPatterns = [
-          'could not locate',
-          'verify if the seller',
-          'not supported',
-          'unable to convert',
-        ];
-        const lowerConverted = convertedText.toLowerCase();
-        const isEarnKaroError = earnKaroErrorPatterns.some((p) => lowerConverted.includes(p));
-
-        if (!isEarnKaroError) {
-          finalContent = convertedText;
-        } else {
-          log.warn('EarnKaro returned a soft error; using original text', {
-            ...ctx,
-            response: convertedText.slice(0, 120),
-          });
-        }
-      } else {
-        log.error('Link conversion failed; using original text', {
-          ...ctx,
-          error: conversionError,
-        });
-      }
-    } else {
-      log.info('No URLs to convert; proceeding with original message content', ctx);
+    if (urlsToConvert.length === 0) {
+      log.info('Skipping message — all URLs already processed (duplicates)', {
+        ...ctx,
+        totalUrls: allUrls.length,
+      });
+      return;
     }
 
-    const cleanedContent = this._removeUrlsFromText(finalContent, urlsToRemove);
+    log.info('URLs to convert', { ...ctx, count: urlsToConvert.length, urls: urlsToConvert });
 
-    if (!cleanedContent.trim()) {
-      log.info('No sendable content after filtering; skipping WhatsApp send', {
+    // ── 5. Convert via EarnKaro ─────────────────────────────────────────────
+    const dealTextForConversion = this._buildDealTextForConversion(text, urlsToConvert);
+
+    const { convertedText, success: conversionSuccess, error: conversionError } =
+      await earnKaroService.convertDeal(dealTextForConversion);
+
+    if (!conversionSuccess) {
+      log.error('Skipping message — EarnKaro conversion failed', {
         ...ctx,
-        blockedCount: blockedUrls.length,
-        removedCount: urlsToRemove.length,
+        error: conversionError,
       });
+      return;
+    }
+
+    // ── 5b. Detect EarnKaro "soft" errors ─────────────────────────────────
+    const earnKaroErrorPatterns = [
+      'could not locate',
+      'verify if the seller',
+      'not supported',
+      'unable to convert',
+    ];
+    const lowerConverted = convertedText.toLowerCase();
+    const isEarnKaroError = earnKaroErrorPatterns.some((p) => lowerConverted.includes(p));
+
+    if (isEarnKaroError) {
+      log.warn('Skipping message — EarnKaro returned a soft error', {
+        ...ctx,
+        response: convertedText.slice(0, 120),
+      });
+      return;
+    }
+
+    // ✅ Conversion successful — use converted text
+    finalContent = convertedText.trim();
+
+    if (!finalContent) {
+      log.info('Skipping message — converted text is empty', ctx);
       return;
     }
 
     log.info('Links ready', ctx);
 
     // ── 6. Build final WhatsApp message ──────────────────────────────────────
-    const finalMessage = this._buildFinalMessage(cleanedContent);
+    const finalMessage = this._buildFinalMessage(finalContent);
 
     // ── 6. Send to WhatsApp ──────────────────────────────────────────────────
     log.info('Final message built; dispatching to WhatsApp', ctx);
@@ -193,10 +200,7 @@ class MessageProcessorService {
    * @returns {string}
    */
   _buildFinalMessage(convertedText) {
-    const lines = [
-      convertedText.trim(),
-    ];
-    return lines.join('\n');
+    return formatDealMessage(convertedText);
   }
 }
 

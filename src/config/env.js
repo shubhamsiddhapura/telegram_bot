@@ -107,7 +107,7 @@ const config = {
   // ── Processing ────────────────────────────────────────────
   processing: {
     dedupCacheTtlSeconds: int('DEDUP_CACHE_TTL_SECONDS', 3600),
-    maxUrlsPerMessage: int('MAX_URLS_PER_MESSAGE', 10),
+    maxUrlsPerMessage: int('MAX_URLS_PER_MESSAGE', 25),
   },
 
   // ── Logging ───────────────────────────────────────────────
