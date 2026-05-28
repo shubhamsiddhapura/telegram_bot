@@ -178,118 +178,163 @@ function formatDealMessage(rawText) {
     return text;
   }
 
-  // Step 2: Split into lines and categorise
   const lines = text.split('\n');
-  let title = '';
-  const dealDetails = [];
-  const linkLines = [];
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    // Reset the regex lastIndex (global flag issue)
+  // Helper to determine if a line has a valid title candidate
+  const getTitleCandidate = (line) => {
     URL_REGEX.lastIndex = 0;
+    const withoutUrl = line.replace(URL_REGEX, '').trim();
+    URL_REGEX.lastIndex = 0;
+    const cleaned = cleanTitle(withoutUrl);
+    if (cleaned && isContentLine(cleaned) && cleaned.length > 2) {
+      return cleaned;
+    }
+    return null;
+  };
 
-    if (hasUrl(line)) {
-      // Reset again after the test call
-      URL_REGEX.lastIndex = 0;
+  if (urls.length === 1) {
+    // ─── Pathway A: Single URL (Traditional Deal Format) ────────────────────
+    const targetUrl = urls[0];
+    let title = '';
+    const dealDetails = [];
 
-      // If the line is ONLY a URL (possibly with "Link:" prefix), treat as link line
-      const lineWithoutUrl = line.replace(URL_REGEX, '').replace(/^link\s*:?\s*/i, '').trim();
-      if (!lineWithoutUrl || lineWithoutUrl.length < 5) {
-        linkLines.push(line);
-      } else {
-        // Line has both text and URL — split: text goes to details, URL to links
-        URL_REGEX.lastIndex = 0;
-        const urlsInLine = line.match(URL_REGEX) || [];
-        const textPart = line.replace(URL_REGEX, '').replace(/^link\s*:?\s*/i, '').trim();
-        if (textPart) {
-          dealDetails.push(textPart);
-        }
-        urlsInLine.forEach((u) => linkLines.push(u));
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      // If the line is pure noise (like lone hashtags, stray markdown, etc.), skip it
+      if (cleanTitle(line) === '') {
+        continue;
       }
-      continue;
+
+      URL_REGEX.lastIndex = 0;
+      if (hasUrl(line)) {
+        URL_REGEX.lastIndex = 0;
+        const cleaned = line
+          .replace(URL_REGEX, '')
+          .replace(/^link\s*:?\s*/i, '')
+          .replace(/^🔗\s*product\s*link\s*:?\s*/i, '')
+          .replace(/^🔗\s*link\s*:?\s*/i, '')
+          .replace(/^🔗\s*/, '')
+          .trim();
+        
+        if (cleaned && cleaned.length >= 3) {
+          const candidate = getTitleCandidate(cleaned);
+          if (!title && candidate) {
+            title = candidate;
+          } else {
+            dealDetails.push(cleaned);
+          }
+        }
+      } else {
+        const candidate = getTitleCandidate(line);
+        if (!title && candidate) {
+          title = candidate;
+        } else if (isContentLine(line) || isPriceLine(line)) {
+          dealDetails.push(line);
+        }
+      }
     }
 
-    // Reset again
-    URL_REGEX.lastIndex = 0;
-
-    // First content-bearing non-URL line becomes the title
-    if (!title && isContentLine(line)) {
-      title = cleanTitle(line);
-      continue;
+    // Fallbacks
+    if (!title && dealDetails.length > 0) {
+      title = cleanTitle(dealDetails.shift());
+    }
+    if (!title) {
+      title = 'Hot Deal';
     }
 
-    // Everything else is deal detail
-    if (isContentLine(line) || isPriceLine(line)) {
-      dealDetails.push(line);
-    }
-  }
+    const cleanedDetails = dealDetails
+      .map((d) => d.trim())
+      .filter((d) => d.length > 2)
+      .filter((d, i, arr) => arr.indexOf(d) === i);
 
-  // Step 3: Fallback — if no title was extracted, use the first deal detail
-  if (!title && dealDetails.length > 0) {
-    title = cleanTitle(dealDetails.shift());
-  }
-
-  // If still no title, use a generic one
-  if (!title) {
-    title = 'Hot Deal';
-  }
-
-  // Step 4: Extract clean URLs for the buy section
-  const buyLinks = [];
-  for (const linkLine of linkLines) {
-    URL_REGEX.lastIndex = 0;
-    const lineUrls = linkLine.match(URL_REGEX) || [];
-    buyLinks.push(...lineUrls);
-  }
-  // Deduplicate
-  const uniqueLinks = [...new Set(buyLinks.length > 0 ? buyLinks : urls)];
-
-  // Step 5: Clean up deal details
-  const cleanedDetails = dealDetails
-    .map((d) => d.replace(/^link\s*:?\s*/i, '').trim())
-    .filter((d) => d.length > 0)
-    // Remove lines that are just "at" or single words
-    .filter((d) => d.length > 2)
-    // Remove duplicate lines
-    .filter((d, i, arr) => arr.indexOf(d) === i);
-
-  // Step 6: Build the formatted message
-  const parts = [];
-
-  // Header with title
-  parts.push(`🔥 *${title}*`);
-  parts.push('');
-
-  // Deal details
-  if (cleanedDetails.length > 0) {
-    parts.push(cleanedDetails.join('\n'));
+    const parts = [];
+    parts.push(`🔥 *${title}*`);
     parts.push('');
-  }
 
-  // Buy links
-  if (uniqueLinks.length === 1) {
-    parts.push(`🛒 *Buy Now:* ${uniqueLinks[0]}`);
+    if (cleanedDetails.length > 0) {
+      parts.push(cleanedDetails.join('\n'));
+      parts.push('');
+    }
+
+    parts.push(`🛒 *Buy Now:* ${targetUrl}`);
+
+    const formatted = parts.join('\n');
+    log.debug('Message formatted (single-link)', { titleExtracted: title });
+    return formatted;
+
   } else {
-    parts.push('🛒 *Buy Now:*');
-    uniqueLinks.forEach((link) => parts.push(link));
+    // ─── Pathway B: Multi-URL (Preserve Inline Associations) ─────────────────
+    let titleIndex = -1;
+    let titleText = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      if (getTitleCandidate(lines[i])) {
+        titleIndex = i;
+        break;
+      }
+    }
+
+    const formattedLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        formattedLines.push('');
+        continue;
+      }
+
+      // If the line is pure noise (like lone hashtags, stray markdown, etc.), skip it
+      if (cleanTitle(line) === '') {
+        continue;
+      }
+
+      if (i === titleIndex) {
+        URL_REGEX.lastIndex = 0;
+        if (hasUrl(line)) {
+          URL_REGEX.lastIndex = 0;
+          const urlsInLine = line.match(URL_REGEX) || [];
+          const textPart = line.replace(URL_REGEX, '').trim();
+
+          titleText = cleanTitle(textPart);
+          if (!titleText) {
+            titleText = 'Hot Deal';
+          }
+
+          formattedLines.push(`🔥 *${titleText}*`);
+          urlsInLine.forEach((url) => formattedLines.push(url));
+        } else {
+          titleText = cleanTitle(line);
+          formattedLines.push(`🔥 *${titleText}*`);
+        }
+        formattedLines.push('');
+      } else {
+        formattedLines.push(line);
+      }
+    }
+
+    // Collapse consecutive empty lines
+    const finalLines = [];
+    for (let i = 0; i < formattedLines.length; i++) {
+      const curr = formattedLines[i];
+      if (curr === '') {
+        if (finalLines.length > 0 && finalLines[finalLines.length - 1] !== '') {
+          finalLines.push('');
+        }
+      } else {
+        finalLines.push(curr);
+      }
+    }
+
+    if (finalLines.length > 0 && finalLines[finalLines.length - 1] === '') {
+      finalLines.pop();
+    }
+
+    const formatted = finalLines.join('\n');
+    log.debug('Message formatted (multi-link)', { titleExtracted: titleText });
+    return formatted;
   }
-
-  // Footer separator
-  parts.push('');
-  parts.push('━━━━━━━━━━━━━━━');
-
-  const formatted = parts.join('\n');
-
-  log.debug('Message formatted', {
-    titleExtracted: title,
-    detailLines: cleanedDetails.length,
-    linkCount: uniqueLinks.length,
-  });
-
-  return formatted;
 }
 
 module.exports = { formatDealMessage };

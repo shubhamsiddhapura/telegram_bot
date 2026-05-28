@@ -64,6 +64,21 @@ const testCases = [
     input: '{"success":1,"data":"Rs.1,700: https://fktr.in/2dz8TcE","randomPostID":"s8O99U"}',
     desc: 'This should NOT happen anymore after the EarnKaro fix, but just in case',
   },
+  {
+    name: 'Myntra Fragrances Trio (User Reported Issue)',
+    input: `Myntra | Luxury Men's Fragrances Trio
+Perfect for premium long-lasting scents from iconic brands with up to 75% off.
+
+JAGUAR Men Classic Black Eau De Toilette (100 ml) 🏷️ Discount: 70% OFF
+🔗 Product Link: https://myntr.in/M9hJFn
+
+Nautica Men Voyage Eau De Toilette (100 ml) 🏷️ Discount: 70% OFF
+🔗 Product Link: https://myntr.in/dZNc5J
+
+JAGUAR Men Classic Eau De Toilette (100 ml) 🏷️ Discount: 75% OFF
+🔗 Product Link: https://myntr.in/PWEv09`,
+    desc: 'Multi-link product list with titles and inline URLs',
+  }
 ];
 
 // ─── Run tests ───────────────────────────────────────────────────────────────
@@ -91,9 +106,14 @@ for (const tc of testCases) {
     // Basic validations
     const checks = [];
 
-    // Must contain at least one URL (if input had URLs)
-    const inputHasUrl = /https?:\/\//.test(tc.input);
+    // Extract urls to see count
+    const URL_REGEX = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)/gi;
+    const inputUrls = tc.input.match(URL_REGEX) || [];
+    const uniqueInputUrls = [...new Set(inputUrls)];
+    const inputHasUrl = uniqueInputUrls.length > 0;
     const outputHasUrl = /https?:\/\//.test(result);
+
+    // Must contain at least one URL (if input had URLs)
     if (inputHasUrl && !outputHasUrl) {
       checks.push('❌ FAIL: URL was lost in formatting!');
     }
@@ -103,13 +123,8 @@ for (const tc of testCases) {
       checks.push('❌ FAIL: Raw JSON detected in output!');
     }
 
-    // Must have the footer
-    if (!result.includes('━━━━━━━━━━━━━━━') && inputHasUrl) {
-      checks.push('❌ FAIL: Missing footer separator');
-    }
-
-    // Must have the Buy Now section (if there were URLs)
-    if (inputHasUrl && !result.includes('🛒')) {
+    // Must have the Buy Now section for single URL deals
+    if (inputHasUrl && uniqueInputUrls.length === 1 && !result.includes('🛒')) {
       checks.push('❌ FAIL: Missing Buy Now section');
     }
 
