@@ -217,7 +217,7 @@ function formatDealMessage(rawText) {
           .replace(/^🔗\s*link\s*:?\s*/i, '')
           .replace(/^🔗\s*/, '')
           .trim();
-        
+
         if (cleaned && cleaned.length >= 3) {
           const candidate = getTitleCandidate(cleaned);
           if (!title && candidate) {
@@ -250,7 +250,7 @@ function formatDealMessage(rawText) {
       .filter((d, i, arr) => arr.indexOf(d) === i);
 
     const parts = [];
-    parts.push(`🔥 *${title}*`);
+    parts.push(`*${title}*`);
     parts.push('');
 
     if (cleanedDetails.length > 0) {
@@ -302,11 +302,11 @@ function formatDealMessage(rawText) {
             titleText = 'Hot Deal';
           }
 
-          formattedLines.push(`🔥 *${titleText}*`);
+          formattedLines.push(`*${titleText}*`);
           urlsInLine.forEach((url) => formattedLines.push(url));
         } else {
           titleText = cleanTitle(line);
-          formattedLines.push(`🔥 *${titleText}*`);
+          formattedLines.push(`*${titleText}*`);
         }
         formattedLines.push('');
       } else {
