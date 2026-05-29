@@ -43,6 +43,7 @@ const QUEUE_NAMES = Object.freeze({
 
 const EVENTS = Object.freeze({
   TELEGRAM_MESSAGE: 'telegram:message',
+  TELEGRAM_MESSAGE_NEW_PIPELINE: 'telegram:message:new_pipeline',
   URLS_EXTRACTED: 'urls:extracted',
   LINKS_CONVERTED: 'links:converted',
   WHATSAPP_SEND: 'whatsapp:send',

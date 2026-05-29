@@ -13,7 +13,7 @@
 
 const { TelegramClient, Logger: GramLogger } = require('telegram');
 const { StringSession } = require('telegram/sessions');
-const { NewMessage, EditedMessage } = require('telegram/events');
+const { NewMessage } = require('telegram/events');
 const { EventEmitter } = require('events');
 
 const config = require('../config/env');
@@ -91,6 +91,13 @@ class TelegramService extends EventEmitter {
    */
   get isConnected() {
     return this._client?.connected ?? false;
+  }
+
+  /**
+   * Returns the underlying GramJS TelegramClient.
+   */
+  get client() {
+    return this._client;
   }
 
   // ─── Private: Connection ─────────────────────────────────────────────────────
@@ -193,15 +200,7 @@ class TelegramService extends EventEmitter {
       new NewMessage({}), // No filters, catch all
     );
 
-    // 3. Handler for Edited Messages (critical for deal channels that post then edit)
-    this._client.addEventHandler(
-      async (event) => {
-        if (event.message) {
-          await this._handleMessage(event.message);
-        }
-      },
-      new EditedMessage({}), // No filters, catch all
-    );
+
 
     log.info('Telegram message listener registered');
   }
@@ -209,10 +208,14 @@ class TelegramService extends EventEmitter {
   /**
    * Processes a single Telegram message (new or historical).
    * @param {import('gramjs/tl/custom/message').Message} message
+   * @param {object} options
+   * @param {boolean} options.isCatchUp
    */
-  async _handleMessage(message) {
+  async _handleMessage(message, options = {}) {
     try {
       if (!message) return;
+
+      const isCatchUp = !!options.isCatchUp;
 
       let chatIdStr = message.chatId?.toString();
       if (!chatIdStr && message.peerId) {
@@ -330,6 +333,19 @@ class TelegramService extends EventEmitter {
         chatId,
         rawMessage: message,
       });
+
+      // Emit to new parallel bot conversion pipeline for live (non-catchup) messages
+      if (!isCatchUp && isAllowed) {
+        log.info('Incoming message for Telegram conversion bot pipeline', { chatId, messageId });
+        this.emit(EVENTS.TELEGRAM_MESSAGE_NEW_PIPELINE, {
+          messageId,
+          text,
+          image: imageBuffer,
+          chatTitle,
+          chatId,
+          rawMessage: message,
+        });
+      }
     } catch (err) {
       log.error('Error handling message', { error: err.message });
     }
@@ -410,7 +426,7 @@ class TelegramService extends EventEmitter {
           }
 
           if (hasUrl) {
-            await this._handleMessage(msg);
+            await this._handleMessage(msg, { isCatchUp: true });
           }
         }
 

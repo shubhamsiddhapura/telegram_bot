@@ -110,6 +110,13 @@ const config = {
     maxUrlsPerMessage: int('MAX_URLS_PER_MESSAGE', 25),
   },
 
+  // ── Telegram Conversion Bot Pipeline ────────────────────────
+  telegramConversion: {
+    botUsername: optional('TELEGRAM_CONVERSION_BOT_USERNAME', ''),
+    timeoutMs: int('TELEGRAM_CONVERSION_TIMEOUT_MS', 30_000),
+    maxRetries: int('TELEGRAM_CONVERSION_MAX_RETRIES', 3),
+  },
+
   // ── Logging ───────────────────────────────────────────────
   logging: {
     level: optional('LOG_LEVEL', 'info'),

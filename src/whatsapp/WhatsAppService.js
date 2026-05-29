@@ -160,7 +160,7 @@ class WhatsAppService {
    * Main method to send a message.
    * Now includes human-like pacing and quiet hours.
    */
-  async sendMessage({ text, imageBuffer, chatId, messageId }) {
+  async sendMessage({ text, imageBuffer, chatId, messageId, targetJid }) {
     const ctx = { messageId, chatId };
 
     if (!this._sock || !this._isReady) {
@@ -185,7 +185,7 @@ class WhatsAppService {
 
     // ─── Actual Send ───────────────────────────────────────────────────────
     try {
-      const jid = config.whatsapp.targetGroup;
+      const jid = targetJid || config.whatsapp.targetGroup;
       if (imageBuffer && imageBuffer.length > 0) {
         await this._sock.sendMessage(jid, {
           image: imageBuffer,
@@ -203,7 +203,7 @@ class WhatsAppService {
 
       return { success: true };
     } catch (err) {
-      log.error('WhatsApp send failed', { error: err.message, ...meta });
+      log.error('WhatsApp send failed', { error: err.message, ...ctx });
       return { success: false, error: err.message };
     }
   }

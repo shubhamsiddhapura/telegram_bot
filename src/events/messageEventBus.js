@@ -17,6 +17,7 @@
  */
 
 const { default: PQueue } = require('p-queue');
+const config = require('../config/env');
 const { EVENTS } = require('../constants');
 const logger = require('../utils/logger');
 const telegramService = require('../telegram/TelegramService');
@@ -28,6 +29,7 @@ const log = logger.forModule('MessageEventBus');
 
 // Use concurrency 1 to ensure strict human-like pacing between messages.
 const processingQueue = new PQueue({ concurrency: 1 });
+const newPipelineQueue = new PQueue({ concurrency: 1 });
 
 // ─── Wiring ───────────────────────────────────────────────────────────────────
 
@@ -50,6 +52,32 @@ const registerListeners = () => {
       });
   });
 
+  // ─── New parallel pipeline listener ─────────────────────────────────────────
+  if (config.telegramConversion.botUsername) {
+    const telegramBotMessageProcessor = require('../services/TelegramBotMessageProcessor');
+
+    telegramService.on(EVENTS.TELEGRAM_MESSAGE_NEW_PIPELINE, async (payload) => {
+      const { messageId, text, image, chatTitle, chatId } = payload;
+
+      log.debug('New pipeline event received', { event: EVENTS.TELEGRAM_MESSAGE_NEW_PIPELINE, messageId });
+
+      newPipelineQueue
+        .add(async () => {
+          await telegramBotMessageProcessor.process({ messageId, text, image, chatTitle, chatId });
+        })
+        .catch((err) => {
+          log.error('Unhandled error in new pipeline queue', {
+            messageId,
+            error: err.message,
+          });
+        });
+    });
+
+    log.info('New pipeline message listeners registered');
+  } else {
+    log.info('New pipeline message listeners skipped: TELEGRAM_CONVERSION_BOT_USERNAME not set');
+  }
+
   log.info('MessageEventBus listeners registered');
 };
 
@@ -57,6 +85,11 @@ const getQueueStats = () => ({
   size: processingQueue.size,
   pending: processingQueue.pending,
   isPaused: processingQueue.isPaused,
+  newPipeline: {
+    size: newPipelineQueue.size,
+    pending: newPipelineQueue.pending,
+    isPaused: newPipelineQueue.isPaused,
+  },
 });
 
 module.exports = { registerListeners, getQueueStats };
