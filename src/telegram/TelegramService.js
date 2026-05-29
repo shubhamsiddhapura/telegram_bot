@@ -156,6 +156,14 @@ class TelegramService extends EventEmitter {
 
     } catch (err) {
       log.error('Failed to connect to Telegram', { error: err.message });
+      if (this._client) {
+        try {
+          await this._client.disconnect();
+        } catch (disErr) {
+          // Ignore disconnect error during cleanup
+        }
+        this._client = null;
+      }
       await this._scheduleReconnect();
     }
   }
