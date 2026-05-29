@@ -9,8 +9,9 @@
  *  - WhatsAppService sending logic
  *
  * Validates:
- *  - Non-Amazon links are correctly skipped in the new pipeline.
- *  - Amazon links are correctly extracted, converted, and forwarded.
+ *  - Non-Amazon links (Flipkart) are correctly skipped.
+ *  - Amazon links are correctly extracted and converted.
+ *  - Dealspouch redirect links (e.g. amaz.dealspouch.com) are correctly extracted and converted.
  */
 
 require('./src/config/env');
@@ -88,6 +89,9 @@ whatsAppService.sendMessage = async ({ text, imageBuffer, chatId, messageId, tar
   return { success: true };
 };
 
+// Override sleep time to allow testing during simulation
+whatsAppService._isSleepTime = () => false;
+
 async function runSimulation() {
   log.info('Starting Telegram Bot Conversion Parallel Pipeline Simulation...');
 
@@ -120,6 +124,21 @@ async function runSimulation() {
 
   log.info('Simulating incoming live Telegram message with Amazon link...', { messageId: amazonPayload.messageId });
   telegramService.emit('telegram:message:new_pipeline', amazonPayload);
+
+  // Wait briefly for log output
+  await sleep(4000);
+
+  // Test Case 3: Dealspouch link (should also be processed, converted, and sent to WhatsApp)
+  const dealspouchPayload = {
+    messageId: `test-live-dealspouch-${Date.now()}`,
+    text: 'Check out this awesome deal on Dealspouch!\n👉 https://amaz.dealspouch.com/r/hea6\nGrab it now!',
+    image: null,
+    chatTitle: 'My Live Deals Channel',
+    chatId: '1412868909'
+  };
+
+  log.info('Simulating incoming live Telegram message with Dealspouch link...', { messageId: dealspouchPayload.messageId });
+  telegramService.emit('telegram:message:new_pipeline', dealspouchPayload);
 
   // Wait for async processing to finish
   await sleep(4000);
