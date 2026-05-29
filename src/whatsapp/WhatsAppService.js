@@ -163,6 +163,12 @@ class WhatsAppService {
   async sendMessage({ text, imageBuffer, chatId, messageId, targetJid }) {
     const ctx = { messageId, chatId };
 
+    // ─── Quiet Hours Check (12:00 AM to 9:00 AM IST) ─────────────────────
+    if (this._isSleepTime()) {
+      log.info('Skipping WhatsApp message dispatch — quiet hours (12:00 AM to 9:00 AM IST)', ctx);
+      return { success: true, skipped: true };
+    }
+
     if (!this._sock || !this._isReady) {
       log.warn('⏳ Waiting for WhatsApp connection to be ready...', ctx);
       // Wait up to 30s
@@ -235,10 +241,7 @@ class WhatsAppService {
 
   _isSleepTime() {
     const current = this._getISTMinutes();
-    if (!this._todayStartTime) {
-      this._todayStartTime = 480 + Math.floor(Math.random() * 60); // Random start between 8:00 AM and 9:00 AM
-    }
-    return current < this._todayStartTime;
+    return current >= 0 && current < 540; // Quiet hours: 12:00 AM to 9:00 AM IST
   }
 
   _generateDailyBreaks() {
