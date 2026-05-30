@@ -80,8 +80,36 @@ async function scrapeProductImage(url) {
       }
     }
 
+    // ─── Amazon specific main product image patterns ────────────────────────
     if (!imageUrl) {
-      log.info('No product image URL found in HTML meta tags', { url });
+      // 1. Try to find landingImage tag with data-old-hires or src
+      const landingImageTagMatch = html.match(/<img[^>]+id=["']landingImage["'][^>]*>/i) ||
+                                   html.match(/<img[^>]+data-a-image-name=["']landingImage["'][^>]*>/i);
+      if (landingImageTagMatch) {
+        const tagHtml = landingImageTagMatch[0];
+        const hiresMatch = tagHtml.match(/data-old-hires=["']([^"']+)["']/i);
+        const srcMatch = tagHtml.match(/src=["']([^"']+)["']/i);
+        imageUrl = (hiresMatch && hiresMatch[1]) || (srcMatch && srcMatch[1]);
+        if (imageUrl) {
+          log.debug('Found Amazon landingImage URL', { imageUrl });
+        }
+      }
+    }
+
+    if (!imageUrl) {
+      // 2. Try to parse colorImages block
+      const colorImagesMatch = html.match(/["']colorImages["']\s*:\s*([^;]+)/i);
+      if (colorImagesMatch) {
+        const firstHiRes = colorImagesMatch[1].match(/"hiRes"\s*:\s*"([^"]+)"/i);
+        if (firstHiRes && firstHiRes[1]) {
+          imageUrl = firstHiRes[1];
+          log.debug('Found Amazon colorImages hiRes URL', { imageUrl });
+        }
+      }
+    }
+
+    if (!imageUrl) {
+      log.info('No product image URL found in HTML meta tags or Amazon selectors', { url });
       return null;
     }
 

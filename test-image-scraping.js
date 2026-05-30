@@ -51,6 +51,18 @@ async function run() {
     'https://www.amazon.in/dp/B0CHX1W1XY'
   );
 
+  // Test Case 2b: Shortened Amazon Link (amzn.to)
+  await testUrl(
+    'Shortened Amazon Link (amzn.to)',
+    'https://amzn.to/3PMwIIe'
+  );
+
+  // Test Case 2c: ExtraPe Converted Link (amzn-to.co)
+  await testUrl(
+    'ExtraPe Converted Link (amzn-to.co)',
+    'https://amzn-to.co/dLFfn4'
+  );
+
   // Test Case 3: Shortened redirect URL (e.g. Myntra/Flipkart shortener)
   // Let's use a known working redirect if possible, otherwise skip or check behavior
   await testUrl(
