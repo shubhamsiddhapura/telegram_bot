@@ -143,6 +143,21 @@ async function runSimulation() {
   // Wait for async processing to finish
   await sleep(4000);
 
+  // Test Case 4: Already-converted amzn-to.co link (should bypass conversion bot and send directly to WhatsApp)
+  const alreadyConvertedPayload = {
+    messageId: `test-live-already-converted-${Date.now()}`,
+    text: 'Check out this awesome deal on Amazon!\n👉 https://amzn-to.co/dLFfn4\nGrab it now!',
+    image: null,
+    chatTitle: 'My Live Deals Channel',
+    chatId: '1412868909'
+  };
+
+  log.info('Simulating incoming live Telegram message with already-converted link...', { messageId: alreadyConvertedPayload.messageId });
+  telegramService.emit('telegram:message:new_pipeline', alreadyConvertedPayload);
+
+  // Wait for async processing to finish
+  await sleep(4000);
+
   log.info('Simulation complete. Check logs to verify correct execution!');
   process.exit(0);
 }

@@ -21,7 +21,7 @@ const AMAZON_DOMAINS = Object.freeze([
   'amzn.to',
   'amzn.in',
   'amzn.eu',
-  'amzn-to.co',       // copycat Amazon shortener
+  'amzn-to.co',       // ExtraPe bot converted domain
   'a.co',
 ]);
 

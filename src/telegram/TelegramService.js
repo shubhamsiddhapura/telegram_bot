@@ -342,9 +342,10 @@ class TelegramService extends EventEmitter {
         rawMessage: message,
       });
 
-      // Emit to new parallel bot conversion pipeline for live (non-catchup) messages
-      if (!isCatchUp && isAllowed) {
-        log.info('Incoming message for Telegram conversion bot pipeline', { chatId, messageId });
+      // Emit to bot conversion pipeline for ALL messages from allowed chats
+      // (including catch-up history — dedup in TelegramBotMessageProcessor prevents double-processing)
+      if (isAllowed) {
+        log.info('Incoming message for Telegram conversion bot pipeline', { chatId, messageId, isCatchUp });
         this.emit(EVENTS.TELEGRAM_MESSAGE_NEW_PIPELINE, {
           messageId,
           text,

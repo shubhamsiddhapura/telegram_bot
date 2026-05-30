@@ -59,21 +59,21 @@ class MessageProcessorService {
     // ── 3. Convert Links (EarnKaro) ───────────────────────────────────────────
     let finalContent = null; // stays null unless conversion succeeds
 
-    // Remove Amazon links first, then cap the remaining URLs.
+    // Remove Amazon links — they are handled exclusively by the ExtraPe bot pipeline.
+    // Only process non-Amazon URLs via EarnKaro.
     const { valid: eligibleUrls, blocked: blockedUrls } = filterUrls(allUrls);
 
     if (blockedUrls.length > 0) {
-      log.info('Skipping message because it contains Amazon links', {
+      log.info('Filtered out Amazon URLs (handled by bot pipeline)', {
         ...ctx,
         blockedCount: blockedUrls.length,
         blockedUrls,
       });
-      return;
     }
 
-    // If the message has no URLs at all, skip it — only send converted deal messages
+    // If no non-Amazon URLs remain, skip — nothing for EarnKaro to convert
     if (eligibleUrls.length === 0) {
-      log.info('Skipping message — no URLs found, nothing to convert', ctx);
+      log.info('Skipping message — no non-Amazon URLs found for EarnKaro', ctx);
       return;
     }
 

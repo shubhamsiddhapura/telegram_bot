@@ -74,6 +74,23 @@ class TelegramBotMessageProcessor {
     const replacements = new Map();
     for (const url of urlsToConvert) {
       try {
+        // Skip conversion if the URL is already an ExtraPe bot affiliate link
+        const isAlreadyConverted = (() => {
+          try {
+            const { hostname } = new URL(url);
+            const normalised = hostname.replace(/^www\./, '').toLowerCase();
+            return normalised === 'amzn-to.co' || normalised.endsWith('.amzn-to.co');
+          } catch {
+            return false;
+          }
+        })();
+
+        if (isAlreadyConverted) {
+          log.info('URL is already an ExtraPe bot affiliate link, skipping conversion', { ...ctx, url });
+          replacements.set(url, url);
+          continue;
+        }
+
         const replyText = await telegramBotConverter.convert(url);
 
         // Extract the converted URL from the bot's reply message
