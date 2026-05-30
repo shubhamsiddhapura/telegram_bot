@@ -18,6 +18,7 @@ const { extractUrls, replaceUrls, isAmazonUrl } = require('../utils/urlExtractor
 const { isMessageDuplicate, deduplicateUrls } = require('../helpers/dedup');
 const telegramBotConverter = require('../telegram/TelegramBotConverter');
 const whatsAppService = require('../whatsapp/WhatsAppService');
+const { scrapeProductImage } = require('../utils/imageScraper');
 
 const log = logger.forModule('TelegramBotMessageProcessor');
 
@@ -133,6 +134,19 @@ class TelegramBotMessageProcessor {
       return;
     }
 
+    // ── 5b. Scrape Product Image if not present ──────────────────────────────
+    let imageBufferToUse = image;
+    if (!imageBufferToUse && amazonUrls && amazonUrls.length > 0) {
+      try {
+        const scraped = await scrapeProductImage(amazonUrls[0]);
+        if (scraped) {
+          imageBufferToUse = scraped;
+        }
+      } catch (scrapeErr) {
+        log.warn('Error scraping product image in bot pipeline', { ...ctx, error: scrapeErr.message });
+      }
+    }
+
     // ── 6. Send to target WhatsApp Group ─────────────────────────────────────
     const targetJid = config.whatsapp.targetGroup;
     log.info('Dispatching bot-converted message to WhatsApp', { ...ctx, targetJid });
@@ -140,7 +154,7 @@ class TelegramBotMessageProcessor {
     try {
       await whatsAppService.sendMessage({
         text: finalContent,
-        imageBuffer: image,
+        imageBuffer: imageBufferToUse,
         chatId,
         messageId,
         targetJid,

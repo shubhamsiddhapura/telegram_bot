@@ -23,6 +23,7 @@ const { formatDealMessage } = require('../utils/MessageFormatter');
 const { isMessageDuplicate, deduplicateUrls } = require('../helpers/dedup');
 const earnKaroService = require('../earnkaro/EarnKaroService');
 const whatsAppService = require('../whatsapp/WhatsAppService');
+const { scrapeProductImage } = require('../utils/imageScraper');
 
 const log = logger.forModule('MessageProcessor');
 
@@ -135,16 +136,29 @@ class MessageProcessorService {
 
     log.info('Links ready', ctx);
 
+    // ── 5. Scrape Product Image if not present ───────────────────────────────
+    let imageBufferToUse = image;
+    if (!imageBufferToUse && eligibleUrls && eligibleUrls.length > 0) {
+      try {
+        const scraped = await scrapeProductImage(eligibleUrls[0]);
+        if (scraped) {
+          imageBufferToUse = scraped;
+        }
+      } catch (scrapeErr) {
+        log.warn('Error scraping product image', { ...ctx, error: scrapeErr.message });
+      }
+    }
+
     // ── 6. Build final WhatsApp message ──────────────────────────────────────
     const finalMessage = this._buildFinalMessage(finalContent);
 
-    // ── 6. Send to WhatsApp ──────────────────────────────────────────────────
+    // ── 7. Send to WhatsApp ──────────────────────────────────────────────────
     log.info('Final message built; dispatching to WhatsApp', ctx);
 
     try {
       await whatsAppService.sendMessage({
         text: finalMessage,
-        imageBuffer: image,
+        imageBuffer: imageBufferToUse,
         chatId,
         messageId
       });
