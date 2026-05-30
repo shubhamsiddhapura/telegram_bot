@@ -318,6 +318,20 @@ class TelegramService extends EventEmitter {
           log.warn('Failed to download photo', { messageId, error: mediaErr.message });
           imageBuffer = null; // Ensure it's null if download failed
         }
+      } else if (
+        message.media &&
+        message.media.className === 'MessageMediaWebPage' &&
+        message.media.webpage &&
+        message.media.webpage.photo
+      ) {
+        log.debug('Downloading webpage preview photo from Telegram...', { messageId });
+        try {
+          imageBuffer = await this._client.downloadMedia(message.media.webpage.photo, { workers: 1 });
+          log.info('Webpage preview photo downloaded successfully', { messageId, size: imageBuffer.length });
+        } catch (mediaErr) {
+          log.warn('Failed to download webpage preview photo', { messageId, error: mediaErr.message });
+          imageBuffer = null; // Ensure it's null if download failed
+        }
       }
 
       // Final check: if buffer is empty, treat as no image

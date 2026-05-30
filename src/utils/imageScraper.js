@@ -5,13 +5,23 @@ const logger = require('./logger');
 
 const log = logger.forModule('ImageScraper');
 
-const SCRAPER_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Cache-Control': 'no-cache',
-  'Pragma': 'no-cache',
-};
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15'
+];
+
+function getRandomHeaders() {
+  const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  return {
+    'User-Agent': ua,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+  };
+}
 
 /**
  * Follows redirects and fetches the HTML content of the page,
@@ -24,23 +34,44 @@ const SCRAPER_HEADERS = {
 async function scrapeProductImage(url) {
   if (!url) return null;
 
-  try {
-    log.info('Scraping product image from URL', { url });
+  let attempt = 1;
+  const maxAttempts = 2;
 
-    // 1. Fetch the HTML content
-    const response = await axios.get(url, {
-      headers: SCRAPER_HEADERS,
-      timeout: 10000,
-      maxRedirects: 5,
-    });
+  while (attempt <= maxAttempts) {
+    try {
+      const headers = getRandomHeaders();
+      log.info(`Scraping product image from URL (Attempt ${attempt}/${maxAttempts})`, { url });
 
-    const html = response.data;
-    if (typeof html !== 'string') {
-      log.warn('Response data is not a string, skipping image scrape', { url });
-      return null;
-    }
+      // 1. Fetch the HTML content
+      const response = await axios.get(url, {
+        headers,
+        timeout: 10000,
+        maxRedirects: 5,
+      });
 
-    // 2. Extract image URL from meta tags using regex
+      const html = response.data;
+      if (typeof html !== 'string') {
+        log.warn('Response data is not a string, skipping image scrape', { url });
+        return null;
+      }
+
+      // Check if blocked by Amazon CAPTCHA
+      if (
+        html.includes('Robot Check') ||
+        html.includes('captcha') ||
+        html.includes('api-services-support@amazon.com')
+      ) {
+        log.warn('Amazon scraping blocked by CAPTCHA page', { url, attempt });
+        if (attempt < maxAttempts) {
+          attempt++;
+          // Pause slightly before retry
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          continue;
+        }
+        return null;
+      }
+
+      // 2. Extract image URL from meta tags using regex
     let imageUrl = null;
 
     const ogImageRegexes = [
@@ -82,16 +113,35 @@ async function scrapeProductImage(url) {
 
     // ─── Amazon specific main product image patterns ────────────────────────
     if (!imageUrl) {
-      // 1. Try to find landingImage tag with data-old-hires or src
+      // 1. Try to find landingImage tag with data-old-hires, src, or data-a-dynamic-image
       const landingImageTagMatch = html.match(/<img[^>]+id=["']landingImage["'][^>]*>/i) ||
                                    html.match(/<img[^>]+data-a-image-name=["']landingImage["'][^>]*>/i);
       if (landingImageTagMatch) {
         const tagHtml = landingImageTagMatch[0];
-        const hiresMatch = tagHtml.match(/data-old-hires=["']([^"']+)["']/i);
-        const srcMatch = tagHtml.match(/src=["']([^"']+)["']/i);
-        imageUrl = (hiresMatch && hiresMatch[1]) || (srcMatch && srcMatch[1]);
-        if (imageUrl) {
-          log.debug('Found Amazon landingImage URL', { imageUrl });
+
+        // (A) Try parsing data-a-dynamic-image JSON dictionary
+        const dynamicImageMatch = tagHtml.match(/data-a-dynamic-image=["']([^"']+)["']/i);
+        if (dynamicImageMatch) {
+          try {
+            const rawJson = dynamicImageMatch[1].replace(/&quot;/g, '"');
+            const parsed = JSON.parse(rawJson);
+            const urls = Object.keys(parsed);
+            if (urls.length > 0) {
+              imageUrl = urls[urls.length - 1]; // Pick the largest/last URL
+              log.debug('Found Amazon dynamic image URL', { imageUrl });
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+
+        if (!imageUrl) {
+          const hiresMatch = tagHtml.match(/data-old-hires=["']([^"']+)["']/i);
+          const srcMatch = tagHtml.match(/src=["']([^"']+)["']/i);
+          imageUrl = (hiresMatch && hiresMatch[1]) || (srcMatch && srcMatch[1]);
+          if (imageUrl) {
+            log.debug('Found Amazon landingImage URL', { imageUrl });
+          }
         }
       }
     }
@@ -126,27 +176,35 @@ async function scrapeProductImage(url) {
 
     log.info('Downloading product image', { imageUrl });
 
-    // 3. Download the image
-    const imageResponse = await axios.get(imageUrl, {
-      responseType: 'arraybuffer',
-      headers: {
-        'User-Agent': SCRAPER_HEADERS['User-Agent'],
-      },
-      timeout: 8000,
-    });
+      // 3. Download the image
+      const imageResponse = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        headers: {
+          'User-Agent': headers['User-Agent'],
+        },
+        timeout: 8000,
+      });
 
-    const buffer = Buffer.from(imageResponse.data, 'binary');
-    if (buffer.length > 0) {
-      log.info('Product image downloaded successfully', { size: buffer.length });
-      return buffer;
+      const buffer = Buffer.from(imageResponse.data, 'binary');
+      if (buffer.length > 0) {
+        log.info('Product image downloaded successfully', { size: buffer.length });
+        return buffer;
+      }
+
+      log.warn('Downloaded image buffer is empty', { imageUrl });
+      return null;
+    } catch (err) {
+      log.warn('Failed to scrape product image from URL', { url, error: err.message });
+      if (attempt < maxAttempts) {
+        attempt++;
+        // Pause slightly before retry
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        continue;
+      }
+      return null;
     }
-
-    log.warn('Downloaded image buffer is empty', { imageUrl });
-    return null;
-  } catch (err) {
-    log.warn('Failed to scrape product image from URL', { url, error: err.message });
-    return null;
   }
+  return null;
 }
 
 module.exports = { scrapeProductImage };
