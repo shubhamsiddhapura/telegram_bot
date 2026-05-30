@@ -45,27 +45,35 @@ const isValidUrl = (url) => {
 };
 
 /**
- * Returns true if the URL belongs to an Amazon domain or a known
- * affiliate redirect domain that wraps Amazon links.
+ * Returns true if the URL belongs to a direct Amazon domain (amzn.to, amazon.in, etc.)
+ * Does NOT include blocked redirect domains (e.g. dealspouch.com).
  * @param {string} url
  * @returns {boolean}
  */
-const isAmazonUrl = (url) => {
+const isDirectAmazonUrl = (url) => {
   try {
     const { hostname } = new URL(url);
     const normalised = hostname.replace(/^www\./, '').toLowerCase();
 
-    // Check direct Amazon domains
-    const isAmazon = AMAZON_DOMAINS.some(
+    return AMAZON_DOMAINS.some(
       (domain) => normalised === domain || normalised.endsWith(`.${domain}`),
     );
-    if (isAmazon) return true;
+  } catch {
+    return false;
+  }
+};
+
+const isAmazonUrl = (url) => {
+  if (isDirectAmazonUrl(url)) return true;
+
+  try {
+    const { hostname } = new URL(url);
+    const normalised = hostname.replace(/^www\./, '').toLowerCase();
 
     // Check known affiliate redirect domains that wrap Amazon links
-    const isBlockedRedirect = BLOCKED_REDIRECT_DOMAINS.some(
+    return BLOCKED_REDIRECT_DOMAINS.some(
       (domain) => normalised === domain || normalised.endsWith(`.${domain}`),
     );
-    return isBlockedRedirect;
   } catch {
     return false;
   }
@@ -143,4 +151,4 @@ const replaceUrls = (text, replacements) => {
   return result;
 };
 
-module.exports = { extractUrls, filterUrls, isAmazonUrl, isValidUrl, replaceUrls };
+module.exports = { extractUrls, filterUrls, isAmazonUrl, isDirectAmazonUrl, isValidUrl, replaceUrls };
