@@ -14,7 +14,7 @@
 
 const config = require('../config/env');
 const logger = require('../utils/logger');
-const { extractUrls, replaceUrls, isDirectAmazonUrl } = require('../utils/urlExtractor');
+const { extractUrls, replaceUrls, isAmazonUrl } = require('../utils/urlExtractor');
 const { isMessageDuplicate, deduplicateUrls } = require('../helpers/dedup');
 const telegramBotConverter = require('../telegram/TelegramBotConverter');
 const whatsAppService = require('../whatsapp/WhatsAppService');
@@ -52,7 +52,7 @@ class TelegramBotMessageProcessor {
 
     // ── 2. Extract URLs & Filter to Amazon Only ──────────────────────────────
     const allUrls = extractUrls(text || '');
-    const amazonUrls = allUrls.filter(url => isDirectAmazonUrl(url));
+    const amazonUrls = allUrls.filter(url => isAmazonUrl(url));
     if (amazonUrls.length === 0) {
       log.debug('Skipping message in new pipeline — no Amazon URLs found', ctx);
       return;
