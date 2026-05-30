@@ -16,6 +16,7 @@
  */
 
 const config = require('../config/env');
+
 const logger = require('../utils/logger');
 const { extractUrls, filterUrls, replaceUrls } = require('../utils/urlExtractor');
 const { formatDealMessage } = require('../utils/MessageFormatter');
