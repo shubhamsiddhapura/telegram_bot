@@ -33,8 +33,8 @@ const hashUrl = (url) =>
  * @param {string} messageId — globally unique message identifier
  * @returns {Promise<boolean>}
  */
-const isMessageDuplicate = async (messageId) => {
-  const key = `${CACHE_KEYS.MESSAGE_DEDUP}${messageId}`;
+const isMessageDuplicate = async (messageId, prefix = '') => {
+  const key = `${prefix}${CACHE_KEYS.MESSAGE_DEDUP}${messageId}`;
 
   if (memCache.has(key)) return true;
   memCache.add(key);
@@ -54,8 +54,8 @@ const isMessageDuplicate = async (messageId) => {
  * @param {string} url
  * @returns {Promise<boolean>}
  */
-const isUrlDuplicate = async (url) => {
-  const key = `${CACHE_KEYS.URL_DEDUP}${hashUrl(url)}`;
+const isUrlDuplicate = async (url, prefix = '') => {
+  const key = `${prefix}${CACHE_KEYS.URL_DEDUP}${hashUrl(url)}`;
 
   if (memCache.has(key)) return true;
   memCache.add(key);
@@ -74,9 +74,9 @@ const isUrlDuplicate = async (url) => {
  * @param {string[]} urls
  * @returns {Promise<string[]>}
  */
-const deduplicateUrls = async (urls) => {
+const deduplicateUrls = async (urls, prefix = '') => {
   const results = await Promise.all(
-    urls.map(async (url) => ({ url, isDup: await isUrlDuplicate(url) })),
+    urls.map(async (url) => ({ url, isDup: await isUrlDuplicate(url, prefix) })),
   );
   return results.filter((r) => !r.isDup).map((r) => r.url);
 };
