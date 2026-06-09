@@ -19,6 +19,7 @@ const { isMessageDuplicate, deduplicateUrls } = require('../helpers/dedup');
 const telegramBotConverter = require('../telegram/TelegramBotConverter');
 const whatsAppService = require('../whatsapp/WhatsAppService');
 const { scrapeProductImage } = require('../utils/imageScraper');
+const categoryClassifier = require('../utils/categoryClassifier');
 
 const log = logger.forModule('TelegramBotMessageProcessor');
 
@@ -147,8 +148,24 @@ class TelegramBotMessageProcessor {
       }
     }
 
-    // ── 6. Send to target WhatsApp Group ─────────────────────────────────────
-    const targetJid = config.whatsapp.targetGroup;
+    // ── 6. Determine routing target based on category ────────────────────────
+    let targetJid = config.whatsapp.targetGroup;
+    if (config.whatsapp.beautyLifestyleGroup) {
+      try {
+        const { shouldRoute, matchedKeyword, source } = await categoryClassifier.shouldRouteToBeautyLifestyle({
+          text: finalContent || text || '',
+          urls: amazonUrls || []
+        });
+
+        if (shouldRoute) {
+          targetJid = config.whatsapp.beautyLifestyleGroup;
+          log.info(`Routing to WowDeals Beauty & Lifestyle (keyword: "${matchedKeyword}" matched in ${source})`, ctx);
+        }
+      } catch (classifyErr) {
+        log.warn('Error during category classification in bot pipeline, falling back to default target', { ...ctx, error: classifyErr.message });
+      }
+    }
+
     log.info('Dispatching bot-converted message to WhatsApp', { ...ctx, targetJid });
 
     try {

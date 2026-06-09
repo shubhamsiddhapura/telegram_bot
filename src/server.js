@@ -45,22 +45,28 @@ const startHttpServer = () => {
   return httpServer;
 };
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
-
 const bootstrap = async () => {
   log.info('=== Telegram Affiliate Bot — Starting ===');
 
   // 1. Start Express HTTP server
   startHttpServer();
 
-  // 2. Register event bus listeners
-  registerListeners();
+  // Check if we should start active forwarding services
+  const startBot = process.env.START_BOT === 'true';
 
-  // 3. Start WhatsApp client (Native Baileys)
-  await whatsAppService.init();
+  if (startBot) {
+    log.info('🤖 Booting with Telegram & WhatsApp forwarding active...');
+    // 2. Register event bus listeners
+    registerListeners();
 
-  // 4. Start Telegram client
-  await telegramService.start();
+    // 3. Start WhatsApp client (Native Baileys)
+    await whatsAppService.init();
+
+    // 4. Start Telegram client
+    await telegramService.start();
+  } else {
+    log.info('🖥️ Booting in Admin API mode (forwarding inactive). Run "npm run message" to start forwarding.');
+  }
 
   log.info('=== System fully operational ===');
 };

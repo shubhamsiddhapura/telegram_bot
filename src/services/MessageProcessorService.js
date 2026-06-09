@@ -24,6 +24,7 @@ const { isMessageDuplicate, deduplicateUrls } = require('../helpers/dedup');
 const earnKaroService = require('../earnkaro/EarnKaroService');
 const whatsAppService = require('../whatsapp/WhatsAppService');
 const { scrapeProductImage } = require('../utils/imageScraper');
+const categoryClassifier = require('../utils/categoryClassifier');
 
 const log = logger.forModule('MessageProcessor');
 
@@ -155,12 +156,31 @@ class MessageProcessorService {
     // ── 7. Send to WhatsApp ──────────────────────────────────────────────────
     log.info('Final message built; dispatching to WhatsApp', ctx);
 
+    // ── 7b. Determine routing target based on category ────────────────────────
+    let targetJid = undefined;
+    if (config.whatsapp.beautyLifestyleGroup) {
+      try {
+        const { shouldRoute, matchedKeyword, source } = await categoryClassifier.shouldRouteToBeautyLifestyle({
+          text: finalMessage || text || '',
+          urls: eligibleUrls || []
+        });
+
+        if (shouldRoute) {
+          targetJid = config.whatsapp.beautyLifestyleGroup;
+          log.info(`Routing to WowDeals Beauty & Lifestyle (keyword: "${matchedKeyword}" matched in ${source})`, ctx);
+        }
+      } catch (classifyErr) {
+        log.warn('Error during category classification, falling back to default routing', { ...ctx, error: classifyErr.message });
+      }
+    }
+
     try {
       await whatsAppService.sendMessage({
         text: finalMessage,
         imageBuffer: imageBufferToUse,
         chatId,
-        messageId
+        messageId,
+        targetJid
       });
       log.info('Message sent successfully', ctx);
     } catch (err) {

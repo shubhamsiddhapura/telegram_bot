@@ -13,6 +13,7 @@ const { asyncHandler } = require('../utils/asyncWrapper');
 const { webhookLimiter } = require('../middlewares/rateLimiter');
 
 const router = Router();
+const adminRouter = require('./admin');
 
 // ── Health ──────────────────────────────────────────────────────────────────
 router.get('/health', healthController.health);
@@ -25,5 +26,8 @@ router.post(
   processValidators,
   asyncHandler(processWebhook),
 );
+
+// ── Admin ───────────────────────────────────────────────────────────────────
+router.use('/admin', adminRouter);
 
 module.exports = router;

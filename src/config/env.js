@@ -72,6 +72,7 @@ const config = {
   nodeEnv: optional('NODE_ENV', 'development'),
   isDev: optional('NODE_ENV', 'development') === 'development',
   isProd: optional('NODE_ENV', 'development') === 'production',
+  adminPassword: optional('ADMIN_PASSWORD', 'admin'),
 
   // ── Telegram ──────────────────────────────────────────────
   telegram: {
@@ -99,6 +100,7 @@ const config = {
   whatsapp: {
     secret: optional('WHATSAPP_SECRET', 'mysecret123'),
     targetGroup: required('WHATSAPP_TARGET_GROUP'),
+    beautyLifestyleGroup: optional('WHATSAPP_BEAUTY_LIFESTYLE_GROUP', ''),
     phoneNumber: optional('WHATSAPP_PHONE_NUMBER', ''),
     timeoutMs: int('WHATSAPP_TIMEOUT_MS', 10_000),
     maxRetries: int('WHATSAPP_MAX_RETRIES', 3),

@@ -6,9 +6,14 @@
   "scripts": {
     "start": "node src/server.js",
     "build": "node scripts/check-env.js",
-    "dev": "nodemon src/server.js",
+    "dev": "node scripts/dev.js",
+    "message": "node scripts/message.js",
     "qr": "node scan-qr.js",
     "gen-wa-session": "node scripts/generate-wa-session.js",
+    "list-groups": "node scripts/list-groups.js",
+    "dashboard": "npm run dev --prefix dashboard",
+    "dashboard:build": "npm run build --prefix dashboard",
+    "dashboard:start": "npm run start --prefix dashboard",
     "lint": "eslint src/",
     "test": "jest --coverage"
   },

@@ -31,6 +31,8 @@ class WhatsAppService {
     this._isReady = false;
     this._isReconnecting = false;
     this._authFolder = path.resolve(process.cwd(), 'wa-session');
+    this._latestQr = null;
+    this._latestPairingCode = null;
 
     // Anti-Ban Logic State
     this._todayStartTime = null;
@@ -95,6 +97,11 @@ class WhatsAppService {
       });
 
       this._sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+        if (qr) {
+          this._latestQr = qr;
+          this._latestPairingCode = null;
+        }
+
         if (qr && !config.whatsapp.phoneNumber) {
           log.info('📱 WhatsApp QR Code received. Please scan in Linked Devices:');
           qrcode.generate(qr, { small: true });
@@ -105,6 +112,8 @@ class WhatsAppService {
               const code = await this._sock.requestPairingCode(config.whatsapp.phoneNumber.replace(/\D/g, ''));
               log.info(`🔑 WHATSAPP PAIRING CODE: ${code}`);
               log.info('Go to WhatsApp > Linked Devices > Link with Phone Number and enter this code.');
+              this._latestPairingCode = code;
+              this._latestQr = null;
             } catch (err) {
               log.error('Failed to get pairing code', { error: err.message });
               this._pairingCodeRequested = false; // Allow retry on failure
@@ -116,10 +125,14 @@ class WhatsAppService {
           log.info('✅ WhatsApp connected successfully!');
           this._isReady = true;
           this._isReconnecting = false;
+          this._latestQr = null;
+          this._latestPairingCode = null;
         }
 
         if (connection === 'close') {
           this._isReady = false;
+          this._latestQr = null;
+          this._latestPairingCode = null;
           const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
           const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
@@ -222,6 +235,8 @@ class WhatsAppService {
       whatsapp: this._isReady,
       isSleepTime: this._isSleepTime(),
       sessionExists: fs.existsSync(this._authFolder),
+      qr: this._latestQr,
+      pairingCode: this._latestPairingCode,
     };
   }
 
